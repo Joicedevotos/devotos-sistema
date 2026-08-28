@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { formatarMoeda } from '../utils/formatters'
-
-const API_URL = 'http://localhost:5000'
+import { API_URL } from '../config'
 
 const FORM_VAZIO = { tipo: '', tamanho: '', descricao: '', codigo_barras: '', valor_custo: '', valor_venda: '', quantidade: '' }
 
@@ -75,7 +74,7 @@ function Produtos() {
       valor_venda: produto.valor_venda ?? '',
       quantidade: produto.quantidade ?? ''
     })
-    setImagemAtual(produto.imagem || null)
+    setImagemAtual(produto.tem_imagem ? produto.id : null)
     setImagem(null)
     setPreview(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -165,7 +164,7 @@ function Produtos() {
             <div>
               <p style={{ fontSize: '13px', color: '#888', marginBottom: '4px' }}>Imagem atual:</p>
               <img
-                src={`${API_URL}/${imagemAtual}`}
+                src={`${API_URL}/api/produtos/${imagemAtual}/imagem`}
                 alt="Imagem atual"
                 style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #ddd' }}
               />
@@ -202,9 +201,9 @@ function Produtos() {
             {produtos.map((p) => (
               <tr key={p.id}>
                 <td>
-                  {p.imagem ? (
+                  {p.tem_imagem ? (
                     <img
-                      src={`${API_URL}/${p.imagem}`}
+                      src={`${API_URL}/api/produtos/${p.id}/imagem`}
                       alt={p.nome}
                       style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px' }}
                     />

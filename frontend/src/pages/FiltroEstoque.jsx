@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { formatarMoeda } from '../utils/formatters'
-
-const API_URL = 'http://localhost:5000'
+import { API_URL } from '../config'
 
 function FiltroEstoque() {
   const [produtos, setProdutos] = useState([])
@@ -122,8 +121,8 @@ function FiltroEstoque() {
               <div className="catalogo-grid">
                 {resultados.map(p => (
                   <div className="catalogo-card" key={p.id}>
-                    {p.imagem ? (
-                      <img src={`${API_URL}/${p.imagem}`} alt={`${p.tipo} ${p.tamanho}`} />
+                    {p.tem_imagem ? (
+                      <img src={`${API_URL}/api/produtos/${p.id}/imagem`} alt={`${p.tipo} ${p.tamanho}`} />
                     ) : (
                       <div className="catalogo-sem-imagem">sem foto</div>
                     )}

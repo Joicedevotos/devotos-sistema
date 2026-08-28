@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { formatarMoeda } from '../utils/formatters'
-
-const API_URL = 'http://localhost:5000'
+import { API_URL } from '../config'
 
 function Dashboard() {
   const [aniversariantesSemana, setAniversariantesSemana] = useState([])

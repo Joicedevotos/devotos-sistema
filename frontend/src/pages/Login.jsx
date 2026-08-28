@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import axios from 'axios'
-
-const API_URL = 'http://localhost:5000/api'
+import { API_URL } from '../config'
 
 function Login({ onLogin }) {
   const [username, setUsername] = useState('admin')
@@ -15,7 +14,7 @@ function Login({ onLogin }) {
     setLoading(true)
 
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
+      const response = await axios.post(`${API_URL}/api/auth/login`, {
         username,
         password
       })

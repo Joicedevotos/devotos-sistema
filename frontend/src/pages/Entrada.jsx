@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { API_URL } from '../config'
 
-const API_URL = 'http://localhost:5000'
 const hoje = () => new Date().toISOString().slice(0, 10)
 
 function Entrada() {
