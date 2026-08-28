@@ -3,8 +3,8 @@ import axios from 'axios'
 import { API_URL } from '../config'
 
 function Login({ onLogin }) {
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('admin123')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -55,11 +55,6 @@ function Login({ onLogin }) {
           {loading ? 'Entrando...' : 'Entrar'}
         </button>
       </form>
-      <p style={{ fontSize: '0.9rem', marginTop: '2rem' }}>
-        <strong>Credenciais de teste:</strong><br />
-        Usuário: admin<br />
-        Senha: admin123
-      </p>
     </div>
   )
 }

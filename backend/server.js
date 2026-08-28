@@ -16,6 +16,9 @@ if (!process.env.DATABASE_URL) {
   process.exit(1)
 }
 
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -106,7 +109,7 @@ async function initDb() {
 
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body
-  if (username === 'admin' && password === 'admin123') {
+  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
     res.json({ success: true, token: 'token-123', user: { id: 1, username: 'admin' } })
   } else {
     res.status(401).json({ error: 'Erro' })
