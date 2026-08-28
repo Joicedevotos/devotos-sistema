@@ -41,6 +41,13 @@ app.use(cors())
 app.use(express.json())
 app.use(express.static('uploads'))
 
+const TAMANHOS_POR_TIPO = {
+  'Camiseta': ['P', 'M', 'G', 'GG', 'XG'],
+  'Baby Look': ['P', 'M', 'G', 'GG', 'XG'],
+  'Infantil': ['02', '04', '06', '08', '10', '12'],
+  'Plus Size': ['G1', 'G2', 'G3']
+}
+
 let produtos = []
 let clientes = []
 let entradas = []
@@ -63,11 +70,17 @@ app.post('/api/produtos', (req, res) => {
   upload.single('imagem')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message })
 
-    const { nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade } = req.body
+    const { tipo, tamanho, descricao, codigo_barras, valor_custo, valor_venda, quantidade } = req.body
+
+    if (!TAMANHOS_POR_TIPO[tipo]) return res.status(400).json({ error: 'Selecione um produto valido' })
+    if (!TAMANHOS_POR_TIPO[tipo].includes(tamanho)) return res.status(400).json({ error: 'Selecione um tamanho valido para esse produto' })
+
     const imagem = req.file ? req.file.filename : null
     const novo = {
       id: produtoId++,
-      nome,
+      tipo,
+      tamanho,
+      nome: `${tipo} - ${tamanho}`,
       descricao,
       codigo_barras: codigo_barras || null,
       valor_custo: parseFloat(valor_custo),
@@ -91,8 +104,14 @@ app.put('/api/produtos/:id', (req, res) => {
     const produto = produtos.find(p => p.id === parseInt(req.params.id))
     if (!produto) return res.status(404).json({ error: 'Produto nao encontrado' })
 
-    const { nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade } = req.body
-    produto.nome = nome
+    const { tipo, tamanho, descricao, codigo_barras, valor_custo, valor_venda, quantidade } = req.body
+
+    if (!TAMANHOS_POR_TIPO[tipo]) return res.status(400).json({ error: 'Selecione um produto valido' })
+    if (!TAMANHOS_POR_TIPO[tipo].includes(tamanho)) return res.status(400).json({ error: 'Selecione um tamanho valido para esse produto' })
+
+    produto.tipo = tipo
+    produto.tamanho = tamanho
+    produto.nome = `${tipo} - ${tamanho}`
     produto.descricao = descricao
     produto.codigo_barras = codigo_barras || null
     produto.valor_custo = parseFloat(valor_custo)
@@ -309,7 +328,7 @@ app.post('/api/saidas/:id/pagamento', (req, res) => {
 })
 
 app.get('/api/dashboard/stats', (req, res) => {
-  const total = produtos.reduce((sum, p) => sum + (p.valor_venda * p.quantidade), 0)
+  const total = produtos.reduce((sum, p) => sum + (p.valor_custo * p.quantidade), 0)
   res.json({ totalProdutos: produtos.length, totalClientes: clientes.length, totalEstoque: total.toFixed(2) })
 })
 

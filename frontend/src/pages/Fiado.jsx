@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { formatarMoeda } from '../utils/formatters'
 
 const API_URL = 'http://localhost:5000'
 
@@ -32,7 +33,7 @@ function Fiado() {
 
       <div className="form-section">
         <p style={{ color: '#555' }}>
-          Total em aberto (fiado): <strong style={{ color: 'red' }}>R$ {totalEmAberto.toFixed(2)}</strong>
+          Total em aberto (fiado): <strong style={{ color: 'red' }}>{formatarMoeda(totalEmAberto)}</strong>
         </p>
       </div>
 
@@ -52,9 +53,9 @@ function Fiado() {
               <tr key={s.id}>
                 <td>{s.cliente_nome}</td>
                 <td>{s.produto_nome} (x{s.quantidade})</td>
-                <td style={{ color: 'red', fontWeight: 'bold' }}>R$ {s.valor_aberto.toFixed(2)}</td>
+                <td style={{ color: 'red', fontWeight: 'bold' }}>{formatarMoeda(s.valor_aberto)}</td>
                 <td>{new Date(s.data_acordada + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                <td>{s.status_fiado === 'parcial' ? 'Parcial (pago R$ ' + s.valor_pago.toFixed(2) + ')' : 'Pendente'}</td>
+                <td>{s.status_fiado === 'parcial' ? 'Parcial (pago ' + formatarMoeda(s.valor_pago) + ')' : 'Pendente'}</td>
               </tr>
             ))}
           </tbody>

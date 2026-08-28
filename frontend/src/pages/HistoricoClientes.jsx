@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { formatarMoeda } from '../utils/formatters'
 
 const API_URL = 'http://localhost:5000'
 const hoje = () => new Date().toISOString().slice(0, 10)
@@ -99,7 +100,7 @@ function HistoricoClientes() {
           <h3>{cliente.nome}</h3>
           <p style={{ marginBottom: '10px', color: '#555' }}>
             Total de itens comprados: <strong>{totalQuantidade}</strong> &nbsp;|&nbsp;
-            Valor total: <strong>R$ {totalValor.toFixed(2)}</strong>
+            Valor total: <strong>{formatarMoeda(totalValor)}</strong>
           </p>
 
           <p style={{ marginBottom: '10px', fontSize: '14px', color: '#555' }}>
@@ -135,17 +136,17 @@ function HistoricoClientes() {
                         s.status_fiado === 'devolvido' ? (
                           <span style={{ color: '#667eea', fontWeight: 'bold' }}>Produto Devolvido</span>
                         ) : s.status_fiado === 'pago' ? (
-                          <span style={{ color: 'green', fontWeight: 'bold' }}>R$ {s.valor_vendido.toFixed(2)} (pago)</span>
+                          <span style={{ color: 'green', fontWeight: 'bold' }}>{formatarMoeda(s.valor_vendido)} (pago)</span>
                         ) : s.status_fiado === 'parcial' ? (
                           <span>
-                            Pago: R$ {s.valor_pago.toFixed(2)}<br />
-                            <span style={{ color: 'red', fontWeight: 'bold' }}>Resta: R$ {restante.toFixed(2)}</span>
+                            Pago: {formatarMoeda(s.valor_pago)}<br />
+                            <span style={{ color: 'red', fontWeight: 'bold' }}>Resta: {formatarMoeda(restante)}</span>
                           </span>
                         ) : (
-                          <span style={{ color: 'red', fontWeight: 'bold' }}>R$ {s.valor_vendido.toFixed(2)}</span>
+                          <span style={{ color: 'red', fontWeight: 'bold' }}>{formatarMoeda(s.valor_vendido)}</span>
                         )
                       ) : (
-                        <span>R$ {s.valor_vendido.toFixed(2)}</span>
+                        <span>{formatarMoeda(s.valor_vendido)}</span>
                       )}
                     </td>
                     <td>{s.fiado ? 'Fiado' : s.forma_pagamento}</td>

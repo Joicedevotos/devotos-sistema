@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { formatarMoeda } from '../utils/formatters'
 
 const API_URL = 'http://localhost:5000'
 
@@ -52,8 +53,8 @@ function Dashboard() {
           <p className="stat-number">{stats.totalClientes || 0}</p>
         </div>
         <div className="stat-card">
-          <h3>💰 Total Estoque</h3>
-          <p className="stat-number">R$ {stats.totalEstoque || 0}</p>
+          <h3>💰 Total Estoque (custo)</h3>
+          <p className="stat-number">{formatarMoeda(stats.totalEstoque || 0)}</p>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { formatarMoeda } from '../utils/formatters'
 
 const API_URL = 'http://localhost:5000'
 const hoje = () => new Date().toISOString().slice(0, 10)
@@ -130,8 +131,8 @@ function Saida() {
           {produtoSelecionado && (
             <div style={{ display: 'flex', gap: '15px', fontSize: '13px', color: '#667eea', margin: '-5px 0 5px' }}>
               <span>Estoque atual: <strong>{produtoSelecionado.quantidade}</strong></span>
-              <span>Valor de Custo: <strong>R$ {produtoSelecionado.valor_custo}</strong></span>
-              <span>Valor de Venda Cadastrado: <strong>R$ {produtoSelecionado.valor_venda}</strong></span>
+              <span>Valor de Custo: <strong>{formatarMoeda(produtoSelecionado.valor_custo)}</strong></span>
+              <span>Valor de Venda Cadastrado: <strong>{formatarMoeda(produtoSelecionado.valor_venda)}</strong></span>
             </div>
           )}
 
@@ -192,7 +193,7 @@ function Saida() {
                 <td>{s.produto_nome}</td>
                 <td>{s.cliente_nome}</td>
                 <td>{s.quantidade}</td>
-                <td>R$ {s.valor_vendido}</td>
+                <td>{formatarMoeda(s.valor_vendido)}</td>
                 <td>{statusFiado(s)}</td>
               </tr>
             ))}

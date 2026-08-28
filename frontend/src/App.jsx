@@ -9,6 +9,7 @@ import Entrada from './pages/Entrada'
 import Saida from './pages/Saida'
 import HistoricoClientes from './pages/HistoricoClientes'
 import Fiado from './pages/Fiado'
+import FiltroEstoque from './pages/FiltroEstoque'
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token'))
@@ -95,6 +96,13 @@ function App() {
           💳 Fiado
         </button>
 
+        <button
+          className={`menu-item ${currentPage === 'filtro-estoque' ? 'active' : ''}`}
+          onClick={() => setCurrentPage('filtro-estoque')}
+        >
+          🔍 Filtro no Estoque
+        </button>
+
         <button className="menu-item logout" onClick={handleLogout}>
           🚪 Sair
         </button>
@@ -115,6 +123,7 @@ function App() {
           {currentPage === 'saida' && <Saida />}
           {currentPage === 'historico' && <HistoricoClientes />}
           {currentPage === 'fiado' && <Fiado />}
+          {currentPage === 'filtro-estoque' && <FiltroEstoque />}
         </div>
       </main>
     </div>

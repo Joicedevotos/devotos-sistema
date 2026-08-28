@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
+import { formatarMoeda } from '../utils/formatters'
 
 const API_URL = 'http://localhost:5000'
 
-const FORM_VAZIO = { nome: '', descricao: '', codigo_barras: '', valor_custo: '', valor_venda: '', quantidade: '' }
+const FORM_VAZIO = { tipo: '', tamanho: '', descricao: '', codigo_barras: '', valor_custo: '', valor_venda: '', quantidade: '' }
 
 function Produtos() {
   const [produtos, setProdutos] = useState([])
@@ -31,7 +33,13 @@ function Produtos() {
   }, [])
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    if (name === 'tipo') {
+      // ao trocar o produto, o tamanho selecionado pode nao existir mais nas opcoes
+      setForm({ ...form, tipo: value, tamanho: '' })
+      return
+    }
+    setForm({ ...form, [name]: value })
   }
 
   const handleFileChange = (e) => {
@@ -59,7 +67,8 @@ function Produtos() {
     setMostrarForm(true)
     setEditingId(produto.id)
     setForm({
-      nome: produto.nome || '',
+      tipo: produto.tipo || '',
+      tamanho: produto.tamanho || '',
       descricao: produto.descricao || '',
       codigo_barras: produto.codigo_barras || '',
       valor_custo: produto.valor_custo ?? '',
@@ -77,7 +86,8 @@ function Produtos() {
     e.preventDefault()
     try {
       const dados = new FormData()
-      dados.append('nome', form.nome)
+      dados.append('tipo', form.tipo)
+      dados.append('tamanho', form.tamanho)
       dados.append('descricao', form.descricao)
       dados.append('codigo_barras', form.codigo_barras)
       dados.append('valor_custo', form.valor_custo)
@@ -113,7 +123,20 @@ function Produtos() {
       <div className="form-section">
         <h3>{editingId ? 'Editar Produto' : 'Novo Produto'}</h3>
         <form onSubmit={handleSubmit}>
-          <input type="text" name="nome" placeholder="Nome" value={form.nome} onChange={handleChange} required />
+          <select name="tipo" value={form.tipo} onChange={handleChange} required>
+            <option value="">Selecione o Produto</option>
+            {TIPOS_PRODUTO.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+
+          <select name="tamanho" value={form.tamanho} onChange={handleChange} required disabled={!form.tipo}>
+            <option value="">{form.tipo ? 'Selecione o Tamanho' : 'Selecione o Produto primeiro'}</option>
+            {(TAMANHOS_POR_TIPO[form.tipo] || []).map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+
           <input type="text" name="descricao" placeholder="Descricao" value={form.descricao} onChange={handleChange} />
           <input type="text" name="codigo_barras" placeholder="Codigo de Barras" value={form.codigo_barras} onChange={handleChange} />
           <input type="number" step="0.01" name="valor_custo" placeholder="Valor Custo" value={form.valor_custo} onChange={handleChange} required />
@@ -165,7 +188,8 @@ function Produtos() {
           <thead>
             <tr>
               <th>Imagem</th>
-              <th>Nome</th>
+              <th>Produto</th>
+              <th>Tamanho</th>
               <th>Descricao</th>
               <th>Cod. Barras</th>
               <th>Valor Custo</th>
@@ -190,11 +214,12 @@ function Produtos() {
                     </div>
                   )}
                 </td>
-                <td>{p.nome}</td>
+                <td>{p.tipo}</td>
+                <td>{p.tamanho}</td>
                 <td>{p.descricao}</td>
                 <td>{p.codigo_barras || '-'}</td>
-                <td>R$ {p.valor_custo}</td>
-                <td>R$ {p.valor_venda}</td>
+                <td>{formatarMoeda(p.valor_custo)}</td>
+                <td>{formatarMoeda(p.valor_venda)}</td>
                 <td>{p.quantidade}</td>
                 <td>
                   <button onClick={() => iniciarEdicao(p)} style={{background: '#667eea', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '5px', cursor: 'pointer'}}>Editar</button>
