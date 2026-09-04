@@ -4,9 +4,19 @@
   box-sizing: border-box;
 }
 
+html, body, #root {
+  height: 100%;
+}
+
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #f5f5f5;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+button {
+  touch-action: manipulation;
 }
 
 .app-container {
@@ -369,25 +379,181 @@ tbody tr:hover {
   }
 }
 
+/* CABEÇALHO ESTILO APP (só aparece no celular, ver media query abaixo) */
+.app-topbar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 14px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.app-topbar-title {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.app-topbar-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  padding: 0;
+}
+
+.app-topbar-avatar:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(255,255,255,0.4);
+}
+
+/* MENU INFERIOR ESTILO APP (só aparece no celular) */
+.bottom-nav {
+  display: none;
+}
+
+.mais-overlay {
+  display: none;
+}
+
 /* RESPONSIVO */
 @media (max-width: 768px) {
   .sidebar {
-    width: 200px;
-  }
-
-  .content {
-    margin-left: 200px;
+    display: none;
   }
 
   .top-bar {
-    padding: 15px 20px;
+    display: none;
+  }
+
+  .content {
+    margin-left: 0;
+  }
+
+  .app-topbar {
+    display: flex;
   }
 
   .page-content {
-    padding: 15px 20px;
+    padding: 15px 16px 90px;
   }
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    background: white;
+    border-top: 1px solid #eee;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+    padding: 6px 4px calc(env(safe-area-inset-bottom, 0px) + 6px);
+  }
+
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: none;
+    color: #888;
+    border-radius: 10px;
+    padding: 6px 2px;
+    font-weight: normal;
+    box-shadow: none;
+  }
+
+  .bottom-nav-item:hover {
+    transform: none;
+    box-shadow: none;
+    background: #f5f5f5;
+  }
+
+  .bottom-nav-item.active {
+    color: #667eea;
+    font-weight: bold;
+  }
+
+  .bottom-nav-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .bottom-nav-label {
+    font-size: 10px;
+  }
+
+  .mais-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 40;
+    animation: fadeIn 0.15s ease;
+  }
+
+  .mais-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    border-radius: 18px 18px 0 0;
+    padding: 10px 14px calc(env(safe-area-inset-bottom, 0px) + 14px);
+    max-height: 70vh;
+    overflow-y: auto;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+  }
+
+  .mais-sheet-handle {
+    width: 40px;
+    height: 4px;
+    background: #ddd;
+    border-radius: 2px;
+    margin: 4px auto 14px;
+  }
+
+  .mais-sheet-item {
+    width: 100%;
+    text-align: left;
+    background: none;
+    color: #333;
+    font-weight: normal;
+    padding: 14px 10px;
+    border-radius: 10px;
+    box-shadow: none;
+    border-bottom: 1px solid #f2f2f2;
+  }
+
+  .mais-sheet-item:hover {
+    transform: none;
+    box-shadow: none;
+    background: #f5f5f5;
+  }
+
+  .mais-sheet-item.active {
+    color: #667eea;
+    font-weight: bold;
+  }
+
+  .mais-sheet-logout {
+    color: #e05555;
+    margin-top: 6px;
+    border-bottom: none;
   }
 }
