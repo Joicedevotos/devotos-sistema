@@ -368,6 +368,10 @@ tbody tr:hover {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .ocultar-valor-pdf .catalogo-valor {
+    display: none !important;
+  }
+
   .catalogo-card {
     box-shadow: none;
     border: 1px solid #ddd;

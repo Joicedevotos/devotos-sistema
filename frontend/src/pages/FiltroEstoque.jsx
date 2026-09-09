@@ -9,6 +9,8 @@ function FiltroEstoque() {
   const [tiposSelecionados, setTiposSelecionados] = useState([])
   const [tamanhosSelecionados, setTamanhosSelecionados] = useState([])
   const [resultados, setResultados] = useState(null)
+  const [mostrarPerguntaPdf, setMostrarPerguntaPdf] = useState(false)
+  const [ocultarValorPdf, setOcultarValorPdf] = useState(false)
 
   useEffect(() => {
     axios.get(`${API_URL}/api/produtos`)
@@ -54,7 +56,14 @@ function FiltroEstoque() {
   }
 
   const handleExportarPDF = () => {
-    window.print()
+    setMostrarPerguntaPdf(true)
+  }
+
+  const confirmarExportacao = (ocultar) => {
+    setOcultarValorPdf(ocultar)
+    setMostrarPerguntaPdf(false)
+    // espera o React aplicar a classe antes de abrir a janela de impressao
+    setTimeout(() => window.print(), 50)
   }
 
   const descricaoFiltro = () => {
@@ -118,7 +127,7 @@ function FiltroEstoque() {
                 <p>{descricaoFiltro()}</p>
               </div>
 
-              <div className="catalogo-grid">
+              <div className={`catalogo-grid${ocultarValorPdf ? ' ocultar-valor-pdf' : ''}`}>
                 {resultados.map(p => (
                   <div className="catalogo-card" key={p.id}>
                     {p.tem_imagem ? (
@@ -146,6 +155,26 @@ function FiltroEstoque() {
             <p>Nenhum produto encontrado com esse filtro</p>
           )}
         </>
+      )}
+
+      {mostrarPerguntaPdf && (
+        <div
+          className="no-print"
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}
+        >
+          <div style={{ background: 'white', borderRadius: '10px', padding: '24px', maxWidth: '340px', textAlign: 'center' }}>
+            <p style={{ marginBottom: '20px', fontSize: '15px', color: '#333' }}>
+              Deseja que o preço de venda apareça no PDF?
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button type="button" onClick={() => confirmarExportacao(false)}>Sim</button>
+              <button type="button" onClick={() => confirmarExportacao(true)} style={{ background: '#999' }}>Não</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
