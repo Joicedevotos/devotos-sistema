@@ -3,6 +3,8 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import multer from 'multer'
 import pg from 'pg'
+import ExcelJS from 'exceljs'
+import { Readable } from 'stream'
 
 dotenv.config()
 
@@ -36,6 +38,16 @@ const upload = multer({
   }
 })
 
+const uploadPlanilha = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const permitido = /\.(xlsx|xls|csv)$/
+    if (permitido.test(file.originalname.toLowerCase())) cb(null, true)
+    else cb(new Error('Envie um arquivo de planilha (.xlsx, .xls ou .csv)'))
+  }
+})
+
 app.use(cors())
 app.use(express.json())
 
@@ -47,6 +59,14 @@ const TAMANHOS_POR_TIPO = {
 }
 
 const PRODUTO_CAMPOS = `id, tipo, tamanho, nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade, (imagem_dados IS NOT NULL) AS tem_imagem`
+
+// remove acentos/espacos extras e ignora maiusculas/minusculas, pra comparar valores vindos de planilha
+function normalizarTexto(valor) {
+  return String(valor ?? '')
+    .normalize('NFD').replace(new RegExp('[̀-ͯ]', 'g'), '')
+    .trim()
+    .toLowerCase()
+}
 
 async function initDb() {
   await pool.query(`
@@ -210,6 +230,137 @@ app.delete('/api/produtos/:id', async (req, res) => {
     console.error(e)
     res.status(500).json({ error: 'Erro ao deletar produto' })
   }
+})
+
+// Modelo de planilha para cadastro em massa
+app.get('/api/produtos/modelo', async (req, res) => {
+  try {
+    const workbook = new ExcelJS.Workbook()
+    const planilha = workbook.addWorksheet('Produtos')
+    planilha.columns = [
+      { header: 'Produto', key: 'tipo', width: 15 },
+      { header: 'Tamanho', key: 'tamanho', width: 10 },
+      { header: 'Descricao', key: 'descricao', width: 30 },
+      { header: 'Codigo de Barras', key: 'codigo_barras', width: 20 },
+      { header: 'Valor Custo', key: 'valor_custo', width: 12 },
+      { header: 'Valor Venda', key: 'valor_venda', width: 12 },
+      { header: 'Quantidade', key: 'quantidade', width: 12 }
+    ]
+    planilha.addRow({ tipo: 'Camiseta', tamanho: 'M', descricao: 'Camiseta basica preta', codigo_barras: '7891234567890', valor_custo: 25.5, valor_venda: 49.9, quantidade: 10 })
+    planilha.getRow(1).font = { bold: true }
+
+    const opcoes = workbook.addWorksheet('Opcoes validas')
+    opcoes.columns = [{ header: 'Produto', key: 'tipo', width: 15 }, { header: 'Tamanhos aceitos', key: 'tamanhos', width: 40 }]
+    Object.entries(TAMANHOS_POR_TIPO).forEach(([tipo, tamanhos]) => {
+      opcoes.addRow({ tipo, tamanhos: tamanhos.join(', ') })
+    })
+    opcoes.getRow(1).font = { bold: true }
+
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.set('Content-Disposition', 'attachment; filename="modelo-produtos.xlsx"')
+    await workbook.xlsx.write(res)
+    res.end()
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'Erro ao gerar modelo de planilha' })
+  }
+})
+
+// Cadastro em massa via planilha
+app.post('/api/produtos/importar', (req, res) => {
+  uploadPlanilha.single('planilha')(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message })
+    try {
+      if (!req.file) return res.status(400).json({ error: 'Nenhuma planilha enviada' })
+
+      const workbook = new ExcelJS.Workbook()
+      const nomeArquivo = req.file.originalname.toLowerCase()
+      if (nomeArquivo.endsWith('.csv')) {
+        await workbook.csv.read(Readable.from(req.file.buffer))
+      } else {
+        await workbook.xlsx.load(req.file.buffer)
+      }
+      const planilha = workbook.worksheets[0]
+      if (!planilha) return res.status(400).json({ error: 'Planilha vazia' })
+
+      const cabecalho = {}
+      planilha.getRow(1).eachCell((cell, colNumber) => {
+        cabecalho[normalizarTexto(cell.value)] = colNumber
+      })
+      const pegarCelula = (row, ...nomes) => {
+        for (const nome of nomes) {
+          const col = cabecalho[normalizarTexto(nome)]
+          if (col) return row.getCell(col).value
+        }
+        return ''
+      }
+
+      const tiposValidos = Object.keys(TAMANHOS_POR_TIPO)
+      const encontrarTipo = (valor) => tiposValidos.find(t => normalizarTexto(t) === normalizarTexto(valor))
+
+      const validos = []
+      const erros = []
+
+      for (let numeroLinha = 2; numeroLinha <= planilha.rowCount; numeroLinha++) {
+        const row = planilha.getRow(numeroLinha)
+        if (row.cellCount === 0 || row.values.every(v => v === null || v === undefined || v === '')) continue
+
+        const tipoBruto = pegarCelula(row, 'Produto', 'Tipo')
+        const tamanhoBruto = pegarCelula(row, 'Tamanho')
+        const descricao = pegarCelula(row, 'Descricao', 'Descrição')
+        const codigoBarras = pegarCelula(row, 'Codigo de Barras', 'Código de Barras', 'codigo_barras')
+        const valorCustoBruto = pegarCelula(row, 'Valor Custo', 'valor_custo')
+        const valorVendaBruto = pegarCelula(row, 'Valor Venda', 'valor_venda')
+        const quantidadeBruto = pegarCelula(row, 'Quantidade', 'quantidade')
+
+        const tipo = encontrarTipo(tipoBruto)
+        if (!tipo) {
+          erros.push({ linha: numeroLinha, motivo: `Produto invalido: "${tipoBruto}"` })
+          continue
+        }
+        const tamanho = (TAMANHOS_POR_TIPO[tipo] || []).find(t => normalizarTexto(t) === normalizarTexto(tamanhoBruto))
+        if (!tamanho) {
+          erros.push({ linha: numeroLinha, motivo: `Tamanho invalido "${tamanhoBruto}" para o produto ${tipo}` })
+          continue
+        }
+        const valorCusto = parseFloat(String(valorCustoBruto).replace(',', '.'))
+        const valorVenda = parseFloat(String(valorVendaBruto).replace(',', '.'))
+        const quantidade = parseInt(quantidadeBruto)
+        if (isNaN(valorCusto) || isNaN(valorVenda)) {
+          erros.push({ linha: numeroLinha, motivo: 'Valor de custo ou venda invalido' })
+          continue
+        }
+        if (isNaN(quantidade)) {
+          erros.push({ linha: numeroLinha, motivo: 'Quantidade invalida' })
+          continue
+        }
+
+        validos.push({
+          tipo, tamanho,
+          descricao: descricao ? String(descricao).trim() : null,
+          codigo_barras: codigoBarras ? String(codigoBarras).trim() : null,
+          valor_custo: valorCusto,
+          valor_venda: valorVenda,
+          quantidade
+        })
+      }
+
+      let criados = 0
+      for (const p of validos) {
+        const nome = `${p.tipo} - ${p.tamanho}`
+        await pool.query(
+          `INSERT INTO produtos (tipo, tamanho, nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [p.tipo, p.tamanho, nome, p.descricao, p.codigo_barras, p.valor_custo, p.valor_venda, p.quantidade]
+        )
+        criados++
+      }
+
+      res.json({ criados, totalLinhas: criados + erros.length, erros })
+    } catch (e) {
+      console.error(e)
+      res.status(500).json({ error: 'Erro ao importar planilha. Verifique se o arquivo esta no formato correto.' })
+    }
+  })
 })
 
 // ==================== CLIENTES ====================

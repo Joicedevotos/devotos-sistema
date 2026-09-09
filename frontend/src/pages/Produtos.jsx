@@ -14,7 +14,12 @@ function Produtos() {
   const [editingId, setEditingId] = useState(null)
   const [imagemAtual, setImagemAtual] = useState(null)
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [mostrarImportar, setMostrarImportar] = useState(false)
+  const [arquivoPlanilha, setArquivoPlanilha] = useState(null)
+  const [importando, setImportando] = useState(false)
+  const [resultadoImportacao, setResultadoImportacao] = useState(null)
   const fileInputRef = useRef(null)
+  const planilhaInputRef = useRef(null)
 
   const carregarProdutos = async () => {
     try {
@@ -108,14 +113,106 @@ function Produtos() {
     }
   }
 
+  const handleArquivoPlanilha = (e) => {
+    setArquivoPlanilha(e.target.files[0] || null)
+    setResultadoImportacao(null)
+  }
+
+  const handleImportarPlanilha = async (e) => {
+    e.preventDefault()
+    if (!arquivoPlanilha) return
+    setImportando(true)
+    setResultadoImportacao(null)
+    try {
+      const dados = new FormData()
+      dados.append('planilha', arquivoPlanilha)
+      const res = await axios.post(`${API_URL}/api/produtos/importar`, dados)
+      setResultadoImportacao(res.data)
+      setArquivoPlanilha(null)
+      if (planilhaInputRef.current) planilhaInputRef.current.value = ''
+      carregarProdutos()
+    } catch (error) {
+      alert('Erro ao importar planilha: ' + (error.response?.data?.error || error.message))
+    } finally {
+      setImportando(false)
+    }
+  }
+
   return (
     <div className="page">
       <h2>Gestao de Produtos</h2>
 
-      {!mostrarForm && (
-        <button onClick={() => setMostrarForm(true)} style={{ marginBottom: '20px' }}>
-          + Cadastrar Novo Produto
-        </button>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+        {!mostrarForm && (
+          <button onClick={() => setMostrarForm(true)}>
+            + Cadastrar Novo Produto
+          </button>
+        )}
+        {!mostrarImportar && (
+          <button onClick={() => setMostrarImportar(true)} style={{ background: '#28a745' }}>
+            Importar Planilha (Excel)
+          </button>
+        )}
+      </div>
+
+      {mostrarImportar && (
+        <div className="form-section" style={{ marginBottom: '20px' }}>
+          <h3>Cadastrar Produtos em Massa</h3>
+          <p style={{ fontSize: '14px', color: '#555' }}>
+            Baixe o modelo, preencha uma linha por produto e envie de volta. A imagem de cada produto continua sendo cadastrada individualmente (edite o produto depois de importar, se quiser adicionar foto).
+          </p>
+          <a
+            href={`${API_URL}/api/produtos/modelo`}
+            style={{ display: 'inline-block', marginBottom: '12px' }}
+          >
+            ⬇ Baixar modelo de planilha (.xlsx)
+          </a>
+          <form onSubmit={handleImportarPlanilha}>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleArquivoPlanilha}
+              ref={planilhaInputRef}
+            />
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <button type="submit" disabled={!arquivoPlanilha || importando}>
+                {importando ? 'Importando...' : 'Importar'}
+              </button>
+              <button
+                type="button"
+                style={{ background: '#999' }}
+                onClick={() => {
+                  setMostrarImportar(false)
+                  setArquivoPlanilha(null)
+                  setResultadoImportacao(null)
+                  if (planilhaInputRef.current) planilhaInputRef.current.value = ''
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+
+          {resultadoImportacao && (
+            <div style={{ marginTop: '14px', padding: '10px', background: '#f5f5f5', borderRadius: '6px' }}>
+              <p style={{ margin: 0, fontWeight: 'bold', color: '#28a745' }}>
+                {resultadoImportacao.criados} produto(s) cadastrado(s) com sucesso.
+              </p>
+              {resultadoImportacao.erros.length > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  <p style={{ margin: 0, fontWeight: 'bold', color: '#c0392b' }}>
+                    {resultadoImportacao.erros.length} linha(s) com erro (nao foram importadas):
+                  </p>
+                  <ul style={{ margin: '4px 0 0 18px', fontSize: '13px', color: '#c0392b' }}>
+                    {resultadoImportacao.erros.map((e, i) => (
+                      <li key={i}>Linha {e.linha}: {e.motivo}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {mostrarForm && (
@@ -146,7 +243,7 @@ function Produtos() {
             <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', color: '#333' }}>
               Imagem do Produto
             </label>
-            <input type="file" name="imagem" accept="image/png, image/jpeg, image/jpg, image/gif, image/webp" capture="environment" onChange={handleFileChange} ref={fileInputRef} />
+            <input type="file" name="imagem" accept="image/png, image/jpeg, image/jpg, image/gif, image/webp" onChange={handleFileChange} ref={fileInputRef} />
             <small style={{ display: 'block', color: '#888', marginTop: '4px' }}>
               {editingId ? 'Selecione uma nova imagem apenas se quiser trocar a atual' : 'Tire uma foto do produto ou escolha uma imagem do dispositivo'}
             </small>
