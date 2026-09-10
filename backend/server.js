@@ -308,7 +308,7 @@ app.post('/api/produtos/importar', (req, res) => {
         const tipoBruto = pegarCelula(row, 'Produto', 'Tipo')
         const tamanhoBruto = pegarCelula(row, 'Tamanho')
         const descricao = pegarCelula(row, 'Descricao', 'Descrição')
-        const codigoBarras = pegarCelula(row, 'Codigo de Barras', 'Código de Barras', 'codigo_barras')
+        const codigoBarras = pegarCelula(row, 'Codigo de Barras', 'Código de Barras', 'codigo_barras', 'Cod. Barras', 'Cod Barras', 'Cod.Barras', 'COD.BARRAS')
         const valorCustoBruto = pegarCelula(row, 'Valor Custo', 'valor_custo')
         const valorVendaBruto = pegarCelula(row, 'Valor Venda', 'valor_venda')
         const quantidadeBruto = pegarCelula(row, 'Quantidade', 'quantidade')
@@ -318,7 +318,14 @@ app.post('/api/produtos/importar', (req, res) => {
           erros.push({ linha: numeroLinha, motivo: `Produto invalido: "${tipoBruto}"` })
           continue
         }
-        const tamanho = (TAMANHOS_POR_TIPO[tipo] || []).find(t => normalizarTexto(t) === normalizarTexto(tamanhoBruto))
+        const tamanho = (TAMANHOS_POR_TIPO[tipo] || []).find(t => {
+          const a = normalizarTexto(t)
+          const b = normalizarTexto(tamanhoBruto)
+          if (a === b) return true
+          // aceita tamanho numerico da planilha sem zero a esquerda (ex: Infantil "2" bate com "02")
+          const numA = Number(a), numB = Number(b)
+          return a !== '' && b !== '' && !isNaN(numA) && !isNaN(numB) && numA === numB
+        })
         if (!tamanho) {
           erros.push({ linha: numeroLinha, motivo: `Tamanho invalido "${tamanhoBruto}" para o produto ${tipo}` })
           continue
