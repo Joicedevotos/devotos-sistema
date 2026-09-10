@@ -52,10 +52,10 @@ app.use(cors())
 app.use(express.json())
 
 const TAMANHOS_POR_TIPO = {
-  'Camiseta': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
-  'Baby Look': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
+  'Camiseta': ['PP', 'P', 'M', 'G', 'GG', 'XG', 'G1', 'G2', 'G3'],
+  'Baby Look': ['PP', 'P', 'M', 'G', 'GG', 'XG', 'G1', 'G2', 'G3'],
   'Infantil': ['02', '04', '06', '08', '10', '12'],
-  'Plus Size': ['G1', 'G2', 'G3']
+  'Body Infantil': ['P', 'M', 'G', 'GG']
 }
 
 const PRODUTO_CAMPOS = `id, tipo, tamanho, nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade, (imagem_dados IS NOT NULL) AS tem_imagem`
