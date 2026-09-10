@@ -323,11 +323,17 @@ app.post('/api/produtos/importar', (req, res) => {
           erros.push({ linha: numeroLinha, motivo: `Tamanho invalido "${tamanhoBruto}" para o produto ${tipo}` })
           continue
         }
-        const valorCusto = parseFloat(String(valorCustoBruto).replace(',', '.'))
+        // valor de custo e opcional (pode ficar em branco e ser preenchido depois editando o produto)
+        const valorCustoStr = String(valorCustoBruto ?? '').trim()
+        const valorCusto = valorCustoStr === '' ? null : parseFloat(valorCustoStr.replace(',', '.'))
         const valorVenda = parseFloat(String(valorVendaBruto).replace(',', '.'))
         const quantidade = parseInt(quantidadeBruto)
-        if (isNaN(valorCusto) || isNaN(valorVenda)) {
-          erros.push({ linha: numeroLinha, motivo: 'Valor de custo ou venda invalido' })
+        if (valorCusto !== null && isNaN(valorCusto)) {
+          erros.push({ linha: numeroLinha, motivo: 'Valor de custo invalido' })
+          continue
+        }
+        if (isNaN(valorVenda)) {
+          erros.push({ linha: numeroLinha, motivo: 'Valor de venda invalido' })
           continue
         }
         if (isNaN(quantidade)) {
