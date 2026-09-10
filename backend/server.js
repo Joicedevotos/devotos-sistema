@@ -52,8 +52,8 @@ app.use(cors())
 app.use(express.json())
 
 const TAMANHOS_POR_TIPO = {
-  'Camiseta': ['P', 'M', 'G', 'GG', 'XG'],
-  'Baby Look': ['P', 'M', 'G', 'GG', 'XG'],
+  'Camiseta': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
+  'Baby Look': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
   'Infantil': ['02', '04', '06', '08', '10', '12'],
   'Plus Size': ['G1', 'G2', 'G3']
 }
