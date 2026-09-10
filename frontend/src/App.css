@@ -329,6 +329,11 @@ tbody tr:hover {
   color: #555;
 }
 
+.catalogo-descricao {
+  font-size: 13px;
+  color: #777;
+}
+
 .catalogo-valor {
   font-size: 20px;
   font-weight: bold;

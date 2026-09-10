@@ -137,6 +137,7 @@ function FiltroEstoque() {
                     )}
                     <div className="catalogo-info">
                       <p className="catalogo-tamanho">{p.tipo} — Tamanho: <strong>{p.tamanho}</strong></p>
+                      {p.descricao && <p className="catalogo-descricao">{p.descricao}</p>}
                       <p className="no-print">Estoque: {p.quantidade}</p>
                       <p className="catalogo-valor">{formatarMoeda(p.valor_venda)}</p>
                     </div>
