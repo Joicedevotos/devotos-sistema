@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
+import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { API_URL } from '../config'
 
 const hoje = () => new Date().toISOString().slice(0, 10)
+
+const FORM_VAZIO = { tipo: '', tamanho: '', descricao: '', quantidade: '', data: hoje(), subtipo: 'compra', cliente_id: '' }
 
 function Entrada() {
   const [produtos, setProdutos] = useState([])
   const [clientes, setClientes] = useState([])
   const [entradas, setEntradas] = useState([])
-  const [buscaProduto, setBuscaProduto] = useState('')
-  const [produtoSelecionado, setProdutoSelecionado] = useState(null)
-  const [form, setForm] = useState({ quantidade: '', data: hoje(), subtipo: 'compra', cliente_id: '' })
+  const [form, setForm] = useState(FORM_VAZIO)
 
   const carregarDados = async () => {
     try {
@@ -31,31 +32,46 @@ function Entrada() {
     carregarDados()
   }, [])
 
-  const labelProduto = (p) => `${p.nome} - ${p.codigo_barras || 'sem codigo'}`
+  // descricoes disponiveis = dos produtos ja cadastrados que batem com o Produto + Tamanho escolhidos
+  const descricoesDisponiveis = useMemo(() => {
+    if (!form.tipo || !form.tamanho) return []
+    return produtos
+      .filter(p => p.tipo === form.tipo && p.tamanho === form.tamanho)
+      .map(p => (p.descricao || '').trim())
+      .filter((d, i, arr) => arr.indexOf(d) === i)
+  }, [produtos, form.tipo, form.tamanho])
 
-  const handleBuscaProduto = (e) => {
-    const texto = e.target.value
-    setBuscaProduto(texto)
-    const encontrado = produtos.find(p => labelProduto(p) === texto)
-      || produtos.find(p => p.codigo_barras && p.codigo_barras === texto)
-      || produtos.find(p => p.nome.toLowerCase() === texto.toLowerCase())
-    setProdutoSelecionado(encontrado || null)
-  }
+  const produtoSelecionado = useMemo(() => {
+    if (!form.tipo || !form.tamanho || !form.descricao) return null
+    return produtos.find(p =>
+      p.tipo === form.tipo &&
+      p.tamanho === form.tamanho &&
+      (p.descricao || '').trim() === form.descricao
+    ) || null
+  }, [produtos, form.tipo, form.tamanho, form.descricao])
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    if (name === 'tipo') {
+      // ao trocar o produto, tamanho e descricao selecionados podem nao existir mais nas opcoes
+      setForm({ ...form, tipo: value, tamanho: '', descricao: '' })
+      return
+    }
+    if (name === 'tamanho') {
+      setForm({ ...form, tamanho: value, descricao: '' })
+      return
+    }
+    setForm({ ...form, [name]: value })
   }
 
   const limparForm = () => {
-    setForm({ quantidade: '', data: hoje(), subtipo: 'compra', cliente_id: '' })
-    setBuscaProduto('')
-    setProdutoSelecionado(null)
+    setForm(FORM_VAZIO)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!produtoSelecionado) {
-      alert('Selecione um produto valido pelo nome ou codigo de barras')
+      alert('Selecione o Produto, o Tamanho e a Descricao')
       return
     }
     if (form.subtipo === 'devolucao' && !form.cliente_id) {
@@ -89,19 +105,32 @@ function Entrada() {
       <div className="form-section">
         <h3>Nova Entrada</h3>
         <form onSubmit={handleSubmit}>
-          <input
-            type="text"
-            list="produtos-entrada"
-            placeholder="Buscar produto por nome ou codigo de barras"
-            value={buscaProduto}
-            onChange={handleBuscaProduto}
-            required
-          />
-          <datalist id="produtos-entrada">
-            {produtos.map(p => (
-              <option key={p.id} value={labelProduto(p)} />
+          <select name="tipo" value={form.tipo} onChange={handleChange} required>
+            <option value="">Selecione o Produto</option>
+            {TIPOS_PRODUTO.map(t => (
+              <option key={t} value={t}>{t}</option>
             ))}
-          </datalist>
+          </select>
+
+          <select name="tamanho" value={form.tamanho} onChange={handleChange} required disabled={!form.tipo}>
+            <option value="">{form.tipo ? 'Selecione o Tamanho' : 'Selecione o Produto primeiro'}</option>
+            {(TAMANHOS_POR_TIPO[form.tipo] || []).map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+
+          <select name="descricao" value={form.descricao} onChange={handleChange} required disabled={!form.tamanho}>
+            <option value="">
+              {!form.tamanho
+                ? 'Selecione o Tamanho primeiro'
+                : descricoesDisponiveis.length > 0
+                  ? 'Selecione a Descricao'
+                  : 'Nenhum produto cadastrado para esse Tamanho'}
+            </option>
+            {descricoesDisponiveis.map(d => (
+              <option key={d} value={d}>{d || '(sem descricao)'}</option>
+            ))}
+          </select>
 
           {produtoSelecionado && (
             <p style={{ fontSize: '13px', color: '#667eea', margin: '-5px 0 5px' }}>

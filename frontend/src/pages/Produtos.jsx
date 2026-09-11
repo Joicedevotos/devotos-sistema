@@ -4,7 +4,7 @@ import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { formatarMoeda } from '../utils/formatters'
 import { API_URL } from '../config'
 
-const FORM_VAZIO = { tipo: '', tamanho: '', descricao: '', codigo_barras: '', valor_custo: '', valor_venda: '', quantidade: '' }
+const FORM_VAZIO = { tipo: '', tamanho: '', descricao: '', valor_custo: '', valor_venda: '', quantidade: '' }
 
 function Produtos() {
   const [produtos, setProdutos] = useState([])
@@ -74,7 +74,6 @@ function Produtos() {
       tipo: produto.tipo || '',
       tamanho: produto.tamanho || '',
       descricao: produto.descricao || '',
-      codigo_barras: produto.codigo_barras || '',
       valor_custo: produto.valor_custo ?? '',
       valor_venda: produto.valor_venda ?? '',
       quantidade: produto.quantidade ?? ''
@@ -93,7 +92,6 @@ function Produtos() {
       dados.append('tipo', form.tipo)
       dados.append('tamanho', form.tamanho)
       dados.append('descricao', form.descricao)
-      dados.append('codigo_barras', form.codigo_barras)
       dados.append('valor_custo', form.valor_custo)
       dados.append('valor_venda', form.valor_venda)
       dados.append('quantidade', form.quantidade)
@@ -234,7 +232,6 @@ function Produtos() {
           </select>
 
           <input type="text" name="descricao" placeholder="Descricao" value={form.descricao} onChange={handleChange} />
-          <input type="text" name="codigo_barras" placeholder="Codigo de Barras" value={form.codigo_barras} onChange={handleChange} />
           <input type="number" step="0.01" name="valor_custo" placeholder="Valor Custo" value={form.valor_custo} onChange={handleChange} required />
           <input type="number" step="0.01" name="valor_venda" placeholder="Valor Venda" value={form.valor_venda} onChange={handleChange} required />
           <input type="number" name="quantidade" placeholder="Quantidade" value={form.quantidade} onChange={handleChange} required />
@@ -287,7 +284,6 @@ function Produtos() {
               <th>Produto</th>
               <th>Tamanho</th>
               <th>Descricao</th>
-              <th>Cod. Barras</th>
               <th>Valor Custo</th>
               <th>Valor Venda</th>
               <th>Quantidade</th>
@@ -313,7 +309,6 @@ function Produtos() {
                 <td>{p.tipo}</td>
                 <td>{p.tamanho}</td>
                 <td>{p.descricao}</td>
-                <td>{p.codigo_barras || '-'}</td>
                 <td>{formatarMoeda(p.valor_custo)}</td>
                 <td>{formatarMoeda(p.valor_venda)}</td>
                 <td>{p.quantidade}</td>
