@@ -18,7 +18,6 @@ function Produtos() {
   const [arquivoPlanilha, setArquivoPlanilha] = useState(null)
   const [importando, setImportando] = useState(false)
   const [resultadoImportacao, setResultadoImportacao] = useState(null)
-  const [imagemVersao, setImagemVersao] = useState({})
   const fileInputRef = useRef(null)
   const planilhaInputRef = useRef(null)
 
@@ -100,7 +99,6 @@ function Produtos() {
 
       if (editingId) {
         await axios.put(`${API_URL}/api/produtos/${editingId}`, dados)
-        if (imagem) setImagemVersao((v) => ({ ...v, [editingId]: Date.now() }))
         alert('Produto atualizado com sucesso!')
       } else {
         await axios.post(`${API_URL}/api/produtos`, dados)
@@ -260,7 +258,7 @@ function Produtos() {
             <div>
               <p style={{ fontSize: '13px', color: '#888', marginBottom: '4px' }}>Imagem atual:</p>
               <img
-                src={`${API_URL}/api/produtos/${imagemAtual}/imagem${imagemVersao[imagemAtual] ? `?v=${imagemVersao[imagemAtual]}` : ''}`}
+                src={`${API_URL}/api/produtos/${imagemAtual}/imagem`}
                 alt="Imagem atual"
                 style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #ddd' }}
               />
@@ -298,7 +296,7 @@ function Produtos() {
                 <td>
                   {p.tem_imagem ? (
                     <img
-                      src={`${API_URL}/api/produtos/${p.id}/imagem${imagemVersao[p.id] ? `?v=${imagemVersao[p.id]}` : ''}`}
+                      src={`${API_URL}/api/produtos/${p.id}/imagem`}
                       alt={p.nome}
                       style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px' }}
                     />

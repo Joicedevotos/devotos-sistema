@@ -179,7 +179,7 @@ app.get('/api/produtos/:id/imagem', async (req, res) => {
     const row = result.rows[0]
     if (!row || !row.imagem_dados) return res.status(404).end()
     res.set('Content-Type', row.imagem_mime || 'image/jpeg')
-    res.set('Cache-Control', 'public, max-age=3600')
+    res.set('Cache-Control', 'no-cache')
     res.send(row.imagem_dados)
   } catch (e) {
     console.error(e)
