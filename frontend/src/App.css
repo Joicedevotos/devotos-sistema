@@ -342,7 +342,7 @@ tbody tr:hover {
 }
 
 @media print {
-  .sidebar, .top-bar, .no-print {
+  .sidebar, .top-bar, .app-topbar, .no-print {
     display: none !important;
   }
 
@@ -369,8 +369,12 @@ tbody tr:hover {
     margin-bottom: 5px;
   }
 
+  /* no PDF os cards viram inline-block (2 por linha): o navegador nunca parte
+     um inline-block entre paginas, entao foto + descricao ficam sempre juntas.
+     break-inside em item de grid nao e respeitado de forma confiavel no Chrome. */
   .catalogo-grid {
-    grid-template-columns: repeat(2, 1fr);
+    display: block;
+    font-size: 0; /* remove o espaco em branco entre os inline-blocks */
   }
 
   .ocultar-valor-pdf .catalogo-valor {
@@ -378,9 +382,15 @@ tbody tr:hover {
   }
 
   .catalogo-card {
+    display: inline-block;
+    vertical-align: top;
+    width: calc(50% - 10px);
+    margin: 0 5px 20px;
+    font-size: 16px;
     box-shadow: none;
     border: 1px solid #ddd;
     break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .catalogo-card img {

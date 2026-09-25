@@ -8,6 +8,7 @@ function FiltroEstoque() {
   const [produtos, setProdutos] = useState([])
   const [tiposSelecionados, setTiposSelecionados] = useState([])
   const [tamanhosSelecionados, setTamanhosSelecionados] = useState([])
+  const [buscaDescricao, setBuscaDescricao] = useState('')
   const [resultados, setResultados] = useState(null)
   const [mostrarPerguntaPdf, setMostrarPerguntaPdf] = useState(false)
   const [ocultarValorPdf, setOcultarValorPdf] = useState(false)
@@ -42,14 +43,21 @@ function FiltroEstoque() {
     setTamanhosSelecionados(prev => prev.includes(tamanho) ? prev.filter(t => t !== tamanho) : [...prev, tamanho])
   }
 
+  // ignora maiuscula/minuscula e acentos ("sao jose" encontra "SÃO JOSÉ")
+  const normalizar = (texto) => (texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+
   const handleProcessar = () => {
-    if (tiposSelecionados.length === 0) {
-      alert('Marque pelo menos um produto')
+    const busca = normalizar(buscaDescricao)
+    if (tiposSelecionados.length === 0 && !busca) {
+      alert('Marque pelo menos um produto ou digite um trecho da descrição')
       return
     }
     const filtrados = produtos.filter(p => {
-      if (!tiposSelecionados.includes(p.tipo)) return false
+      // so mostra o que tem saldo em estoque
+      if (!(Number(p.quantidade) > 0)) return false
+      if (tiposSelecionados.length > 0 && !tiposSelecionados.includes(p.tipo)) return false
       if (tamanhosSelecionados.length > 0 && !tamanhosSelecionados.includes(p.tamanho)) return false
+      if (busca && !normalizar(p.descricao).includes(busca)) return false
       return true
     })
     setResultados(filtrados)
@@ -67,8 +75,10 @@ function FiltroEstoque() {
   }
 
   const descricaoFiltro = () => {
-    const partes = [tiposSelecionados.join(', ')]
+    const partes = []
+    if (tiposSelecionados.length > 0) partes.push(tiposSelecionados.join(', '))
     if (tamanhosSelecionados.length > 0) partes.push(`Tamanhos: ${tamanhosSelecionados.join(', ')}`)
+    if (buscaDescricao.trim()) partes.push(`Descrição contém: "${buscaDescricao.trim()}"`)
     return partes.join(' — ')
   }
 
@@ -79,7 +89,17 @@ function FiltroEstoque() {
       <div className="form-section no-print">
         <h3>Filtrar Produtos</h3>
 
-        <p style={{ fontSize: '14px', color: '#333', marginBottom: '8px' }}>Produto (marque um ou mais)</p>
+        <p style={{ fontSize: '14px', color: '#333', marginBottom: '8px' }}>Buscar pela descrição (digite um pedaço do nome)</p>
+        <input
+          type="text"
+          value={buscaDescricao}
+          onChange={e => setBuscaDescricao(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleProcessar() }}
+          placeholder="Ex: guadal"
+          style={{ marginBottom: '15px' }}
+        />
+
+        <p style={{ fontSize: '14px', color: '#333', marginBottom: '8px' }}>Produto (marque um ou mais — se não marcar nenhum, busca em todos)</p>
         <div className="filtro-checkboxes">
           {TIPOS_PRODUTO.map(t => (
             <label key={t} className="filtro-checkbox-item">
@@ -114,6 +134,9 @@ function FiltroEstoque() {
         </div>
 
         <button type="button" onClick={handleProcessar} style={{ marginTop: '15px' }}>Processar</button>
+        <p style={{ fontSize: '13px', color: '#888', marginTop: '8px' }}>
+          Só aparecem produtos com saldo em estoque (produtos zerados ficam de fora).
+        </p>
       </div>
 
       {resultados && (
@@ -153,7 +176,7 @@ function FiltroEstoque() {
               </p>
             </>
           ) : (
-            <p>Nenhum produto encontrado com esse filtro</p>
+            <p>Nenhum produto com saldo em estoque encontrado com esse filtro</p>
           )}
         </>
       )}
