@@ -11,6 +11,26 @@ import HistoricoClientes from './pages/HistoricoClientes'
 import Fiado from './pages/Fiado'
 import FiltroEstoque from './pages/FiltroEstoque'
 
+// Coloca o token ja no carregamento do modulo: as telas filhas buscam dados nos
+// proprios useEffect, que rodam antes de qualquer useEffect do App.
+const tokenSalvo = localStorage.getItem('token')
+if (tokenSalvo) axios.defaults.headers.common['Authorization'] = `Bearer ${tokenSalvo}`
+
+// Login vencido ou invalido (ex.: token antigo salvo no celular) -> volta pra tela de login.
+// Registrado aqui (e nao num useEffect) porque o axios so aplica os interceptors que ja
+// existiam no momento em que cada requisicao foi disparada.
+let aoPerderLogin = null
+axios.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401 && !err.config?.url?.includes('/api/auth/login')) {
+      localStorage.removeItem('token')
+      aoPerderLogin?.()
+    }
+    return Promise.reject(err)
+  }
+)
+
 const PAGINAS = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'produtos', label: 'Produtos', icon: '📦' },
@@ -32,10 +52,9 @@ function App() {
   const [menuMaisAberto, setMenuMaisAberto] = useState(false)
 
   useEffect(() => {
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-    }
-  }, [token])
+    aoPerderLogin = () => handleLogout()
+    return () => { aoPerderLogin = null }
+  }, [])
 
   const irPara = (pagina) => {
     setCurrentPage(pagina)
@@ -43,6 +62,7 @@ function App() {
   }
 
   const handleLogin = (newToken, userData) => {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
     setToken(newToken)
     setUser(userData)
     localStorage.setItem('token', newToken)

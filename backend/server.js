@@ -5,6 +5,8 @@ import multer from 'multer'
 import pg from 'pg'
 import ExcelJS from 'exceljs'
 import { Readable } from 'stream'
+import crypto from 'crypto'
+import jwt from 'jsonwebtoken'
 
 dotenv.config()
 
@@ -20,6 +22,12 @@ if (!process.env.DATABASE_URL) {
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
+
+// Chave que assina o token de login. Se JWT_SECRET nao estiver configurado, deriva
+// uma chave dos segredos que ja existem no servidor (nunca fica escrita no codigo).
+// Trocar a senha do admin derruba os logins antigos.
+const JWT_SECRET = process.env.JWT_SECRET ||
+  crypto.createHash('sha256').update(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}:${process.env.DATABASE_URL}`).digest('hex')
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -50,6 +58,29 @@ const uploadPlanilha = multer({
 
 app.use(cors())
 app.use(express.json())
+
+// Rotas que funcionam sem login: o proprio login, health check, a foto do produto
+// (carregada por <img>, que nao envia o token) e o modelo de planilha em branco.
+const ROTAS_PUBLICAS = [
+  ['POST', /^\/auth\/login$/],
+  ['GET', /^\/health$/],
+  ['GET', /^\/produtos\/\d+\/imagem$/],
+  ['GET', /^\/produtos\/modelo$/],
+]
+
+app.use('/api', (req, res, next) => {
+  if (req.method === 'OPTIONS') return next()
+  if (ROTAS_PUBLICAS.some(([metodo, rota]) => metodo === req.method && rota.test(req.path))) return next()
+
+  const token = req.headers.authorization?.split(' ')[1]
+  if (!token) return res.status(401).json({ error: 'Faça login para continuar' })
+  try {
+    req.user = jwt.verify(token, JWT_SECRET)
+    next()
+  } catch {
+    res.status(401).json({ error: 'Sessão expirada, faça login novamente' })
+  }
+})
 
 const TAMANHOS_POR_TIPO = {
   'Camiseta': ['PP', 'P', 'M', 'G', 'GG', 'XG', 'G1', 'G2', 'G3'],
@@ -127,12 +158,19 @@ async function initDb() {
   console.log('Banco de dados (Postgres) pronto')
 }
 
+const textoIgual = (a, b) => {
+  const hashA = crypto.createHash('sha256').update(String(a ?? '')).digest()
+  const hashB = crypto.createHash('sha256').update(String(b ?? '')).digest()
+  return crypto.timingSafeEqual(hashA, hashB)
+}
+
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-    res.json({ success: true, token: 'token-123', user: { id: 1, username: 'admin' } })
+  if (textoIgual(username, ADMIN_USERNAME) && textoIgual(password, ADMIN_PASSWORD)) {
+    const token = jwt.sign({ username: ADMIN_USERNAME }, JWT_SECRET, { expiresIn: '30d' })
+    res.json({ success: true, token, user: { id: 1, username: ADMIN_USERNAME } })
   } else {
-    res.status(401).json({ error: 'Erro' })
+    res.status(401).json({ error: 'Usuário ou senha inválidos' })
   }
 })
 
