@@ -95,7 +95,14 @@ async function inserir(client, tabela, linhas, colunas) {
   const { rows: [{ n }] } = await client.query('SELECT COUNT(*)::int AS n FROM produtos');
   if (n > 0) throw new Error(`O banco de destino ja tem ${n} produtos. Por seguranca, so restauro num banco vazio.`);
 
-  // Fotos: uma por conteudo (md5 do original), reduzida antes de enviar
+  // Backup no formato novo: fotos ja vem na tabela imagens, prontas
+  for (const img of t.imagens || []) {
+    await client.query('INSERT INTO imagens (hash, dados, mime) VALUES ($1,$2,$3) ON CONFLICT (hash) DO NOTHING',
+      [img.hash, Buffer.from(img.dados.base64, 'base64'), img.mime]);
+  }
+  if (t.imagens) console.log(`imagens: ${t.imagens.length} fotos`);
+
+  // Backup no formato antigo (foto dentro de produtos): uma por conteudo, reduzida antes de enviar
   const hashDoOriginal = new Map(); // md5 do original -> hash da foto guardada
   let antes = 0, depois = 0;
   for (const p of t.produtos || []) {
@@ -114,7 +121,7 @@ async function inserir(client, tabela, linhas, colunas) {
     p.imagem_hash = hashDoOriginal.get(chave);
   }
   const mb = b => (b / 1024 / 1024).toFixed(1) + ' MB';
-  console.log(`imagens: ${hashDoOriginal.size} fotos diferentes, ${mb(antes)} -> ${mb(depois)}`);
+  if (hashDoOriginal.size) console.log(`imagens: ${hashDoOriginal.size} fotos diferentes, ${mb(antes)} -> ${mb(depois)}`);
 
   await client.query('BEGIN');
   await inserir(client, 'produtos', t.produtos || [],
