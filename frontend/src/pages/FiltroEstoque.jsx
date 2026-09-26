@@ -70,8 +70,15 @@ function FiltroEstoque() {
   const confirmarExportacao = (ocultar) => {
     setOcultarValorPdf(ocultar)
     setMostrarPerguntaPdf(false)
-    // espera o React aplicar a classe antes de abrir a janela de impressao
-    setTimeout(() => window.print(), 50)
+    // espera o React aplicar a classe antes de abrir a janela de impressao.
+    // As fotos so carregam quando aparecem na tela; pro PDF precisa de todas,
+    // entao forca carregar as que faltam e so depois abre a impressao
+    setTimeout(async () => {
+      const fotos = [...document.querySelectorAll('img[loading="lazy"]')]
+      fotos.forEach(img => { img.loading = 'eager' })
+      await Promise.all(fotos.map(img => img.complete ? null : new Promise(ok => { img.onload = img.onerror = ok })))
+      window.print()
+    }, 50)
   }
 
   const descricaoFiltro = () => {
@@ -154,7 +161,7 @@ function FiltroEstoque() {
                 {resultados.map(p => (
                   <div className="catalogo-card" key={p.id}>
                     {p.tem_imagem ? (
-                      <img src={`${API_URL}/api/produtos/${p.id}/imagem`} alt={`${p.tipo} ${p.tamanho}`} />
+                      <img src={`${API_URL}/api/imagens/${p.imagem_hash}`} alt={`${p.tipo} ${p.tamanho}`} loading="lazy" />
                     ) : (
                       <div className="catalogo-sem-imagem">sem foto</div>
                     )}

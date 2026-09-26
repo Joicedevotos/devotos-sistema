@@ -31,7 +31,8 @@ const JWT_SECRET = process.env.JWT_SECRET ||
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  // DATABASE_SSL=false so pra testar com um banco local (sem SSL)
+  ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false }
 })
 
 const upload = multer({
@@ -65,6 +66,7 @@ const ROTAS_PUBLICAS = [
   ['POST', /^\/auth\/login$/],
   ['GET', /^\/health$/],
   ['GET', /^\/produtos\/\d+\/imagem$/],
+  ['GET', /^\/imagens\/[0-9a-f]{32}$/],
   ['GET', /^\/produtos\/modelo$/],
 ]
 
@@ -89,7 +91,25 @@ const TAMANHOS_POR_TIPO = {
   'Body Infantil': ['P', 'M', 'G', 'GG']
 }
 
-const PRODUTO_CAMPOS = `id, tipo, tamanho, nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade, (imagem_dados IS NOT NULL) AS tem_imagem`
+const PRODUTO_CAMPOS = `id, tipo, tamanho, nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade, imagem_hash, (imagem_hash IS NOT NULL) AS tem_imagem`
+
+// Fotos ficam na tabela "imagens", uma linha por foto diferente, identificada pelo
+// md5 do conteudo: a mesma foto usada em varios tamanhos e guardada uma vez so.
+// Como o endereco /api/imagens/<md5> muda sempre que a foto muda, o navegador pode
+// guardar a foto pra sempre sem nunca mais pedir ao servidor (e ao banco).
+async function salvarImagem(arquivo) {
+  const hash = crypto.createHash('md5').update(arquivo.buffer).digest('hex')
+  await pool.query(
+    'INSERT INTO imagens (hash, dados, mime) VALUES ($1, $2, $3) ON CONFLICT (hash) DO NOTHING',
+    [hash, arquivo.buffer, arquivo.mimetype]
+  )
+  return hash
+}
+
+async function apagarImagemSemUso(hash) {
+  if (!hash) return
+  await pool.query('DELETE FROM imagens WHERE hash=$1 AND NOT EXISTS (SELECT 1 FROM produtos WHERE imagem_hash=$1)', [hash])
+}
 
 // remove acentos/espacos extras e ignora maiusculas/minusculas, pra comparar valores vindos de planilha
 function normalizarTexto(valor) {
@@ -154,7 +174,29 @@ async function initDb() {
       valor_pago DOUBLE PRECISION DEFAULT 0,
       pagamentos JSONB DEFAULT '[]'
     );
+
+    CREATE TABLE IF NOT EXISTS imagens (
+      hash TEXT PRIMARY KEY,
+      dados BYTEA NOT NULL,
+      mime TEXT
+    );
+
+    ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imagem_hash TEXT;
   `)
+
+  // Fotos antigas (salvas direto em produtos.imagem_dados) passam pra tabela imagens.
+  // Roda tudo dentro do banco, sem trafegar as fotos; depois da 1a vez nao acha mais nada.
+  const migradas = await pool.query(`
+    WITH novas AS (
+      INSERT INTO imagens (hash, dados, mime)
+      SELECT DISTINCT ON (md5(imagem_dados)) md5(imagem_dados), imagem_dados, imagem_mime
+      FROM produtos WHERE imagem_dados IS NOT NULL AND imagem_hash IS NULL
+      ON CONFLICT (hash) DO NOTHING
+    )
+    UPDATE produtos SET imagem_hash = md5(imagem_dados), imagem_dados = NULL
+    WHERE imagem_dados IS NOT NULL AND imagem_hash IS NULL
+  `)
+  if (migradas.rowCount) console.log(`${migradas.rowCount} fotos de produtos migradas para a tabela imagens`)
   console.log('Banco de dados (Postgres) pronto')
 }
 
@@ -185,13 +227,12 @@ app.post('/api/produtos', (req, res) => {
       if (!TAMANHOS_POR_TIPO[tipo].includes(tamanho)) return res.status(400).json({ error: 'Selecione um tamanho valido para esse produto' })
 
       const nome = `${tipo} - ${tamanho}`
-      const imagemDados = req.file ? req.file.buffer : null
-      const imagemMime = req.file ? req.file.mimetype : null
+      const imagemHash = req.file ? await salvarImagem(req.file) : null
 
       const result = await pool.query(
-        `INSERT INTO produtos (tipo, tamanho, nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade, imagem_dados, imagem_mime)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${PRODUTO_CAMPOS}`,
-        [tipo, tamanho, nome, descricao, codigo_barras || null, parseFloat(valor_custo), parseFloat(valor_venda), parseInt(quantidade), imagemDados, imagemMime]
+        `INSERT INTO produtos (tipo, tamanho, nome, descricao, codigo_barras, valor_custo, valor_venda, quantidade, imagem_hash)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING ${PRODUTO_CAMPOS}`,
+        [tipo, tamanho, nome, descricao, codigo_barras || null, parseFloat(valor_custo), parseFloat(valor_venda), parseInt(quantidade), imagemHash]
       )
       res.status(201).json(result.rows[0])
     } catch (e) {
@@ -211,14 +252,29 @@ app.get('/api/produtos', async (req, res) => {
   }
 })
 
+// Endereco antigo da foto (usado pelas versoes anteriores do app ainda abertas no celular)
 app.get('/api/produtos/:id/imagem', async (req, res) => {
   try {
-    const result = await pool.query('SELECT imagem_dados, imagem_mime FROM produtos WHERE id=$1', [req.params.id])
+    const result = await pool.query('SELECT imagem_hash FROM produtos WHERE id=$1', [req.params.id])
+    const hash = result.rows[0]?.imagem_hash
+    if (!hash) return res.status(404).end()
+    res.redirect(302, `/api/imagens/${hash}`)
+  } catch (e) {
+    console.error(e)
+    res.status(500).end()
+  }
+})
+
+app.get('/api/imagens/:hash', async (req, res) => {
+  if (!/^[0-9a-f]{32}$/.test(req.params.hash)) return res.status(404).end()
+  try {
+    const result = await pool.query('SELECT dados, mime FROM imagens WHERE hash=$1', [req.params.hash])
     const row = result.rows[0]
-    if (!row || !row.imagem_dados) return res.status(404).end()
-    res.set('Content-Type', row.imagem_mime || 'image/jpeg')
-    res.set('Cache-Control', 'no-cache')
-    res.send(row.imagem_dados)
+    if (!row) return res.status(404).end()
+    res.set('Content-Type', row.mime || 'image/jpeg')
+    // o endereco ja identifica o conteudo, entao a foto nunca muda: pode guardar por 1 ano
+    res.set('Cache-Control', 'public, max-age=31536000, immutable')
+    res.send(row.dados)
   } catch (e) {
     console.error(e)
     res.status(500).end()
@@ -238,11 +294,14 @@ app.put('/api/produtos/:id', (req, res) => {
       let result
 
       if (req.file) {
+        const anterior = await pool.query('SELECT imagem_hash FROM produtos WHERE id=$1', [req.params.id])
+        const imagemHash = await salvarImagem(req.file)
         result = await pool.query(
-          `UPDATE produtos SET tipo=$1, tamanho=$2, nome=$3, descricao=$4, codigo_barras=$5, valor_custo=$6, valor_venda=$7, quantidade=$8, imagem_dados=$9, imagem_mime=$10
-           WHERE id=$11 RETURNING ${PRODUTO_CAMPOS}`,
-          [tipo, tamanho, nome, descricao, codigo_barras || null, parseFloat(valor_custo), parseFloat(valor_venda), parseInt(quantidade), req.file.buffer, req.file.mimetype, req.params.id]
+          `UPDATE produtos SET tipo=$1, tamanho=$2, nome=$3, descricao=$4, codigo_barras=$5, valor_custo=$6, valor_venda=$7, quantidade=$8, imagem_hash=$9
+           WHERE id=$10 RETURNING ${PRODUTO_CAMPOS}`,
+          [tipo, tamanho, nome, descricao, codigo_barras || null, parseFloat(valor_custo), parseFloat(valor_venda), parseInt(quantidade), imagemHash, req.params.id]
         )
+        await apagarImagemSemUso(anterior.rows[0]?.imagem_hash)
       } else {
         result = await pool.query(
           `UPDATE produtos SET tipo=$1, tamanho=$2, nome=$3, descricao=$4, codigo_barras=$5, valor_custo=$6, valor_venda=$7, quantidade=$8
@@ -262,7 +321,8 @@ app.put('/api/produtos/:id', (req, res) => {
 
 app.delete('/api/produtos/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM produtos WHERE id=$1', [req.params.id])
+    const result = await pool.query('DELETE FROM produtos WHERE id=$1 RETURNING imagem_hash', [req.params.id])
+    await apagarImagemSemUso(result.rows[0]?.imagem_hash)
     res.json({ msg: 'deletado' })
   } catch (e) {
     console.error(e)
@@ -532,7 +592,7 @@ app.post('/api/entradas', async (req, res) => {
   try {
     await client.query('BEGIN')
 
-    const produtoRes = await client.query('SELECT * FROM produtos WHERE id=$1 FOR UPDATE', [produto_id])
+    const produtoRes = await client.query(`SELECT ${PRODUTO_CAMPOS} FROM produtos WHERE id=$1 FOR UPDATE`, [produto_id])
     const produto = produtoRes.rows[0]
     if (!produto) {
       await client.query('ROLLBACK')
@@ -615,7 +675,7 @@ app.post('/api/saidas', async (req, res) => {
   try {
     await client.query('BEGIN')
 
-    const produtoRes = await client.query('SELECT * FROM produtos WHERE id=$1 FOR UPDATE', [produto_id])
+    const produtoRes = await client.query(`SELECT ${PRODUTO_CAMPOS} FROM produtos WHERE id=$1 FOR UPDATE`, [produto_id])
     const produto = produtoRes.rows[0]
     if (!produto) {
       await client.query('ROLLBACK')
