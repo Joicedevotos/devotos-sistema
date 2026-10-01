@@ -790,6 +790,79 @@ app.get('/api/dashboard/stats', async (req, res) => {
   }
 })
 
+// Limites do plano gratis do Neon (por projeto). Passou de transferencia ou de horas de
+// processamento, o banco fica bloqueado ate o mes virar (aconteceu em 2026-09-26);
+// passou de espaco, ninguem salva mais nada.
+const LIMITES_NEON = {
+  espacoBytes: 0.5e9,
+  transferenciaBytes: 5e9,
+  processamentoHoras: 100
+}
+
+// A API do Neon atualiza o consumo com atraso; guardar a resposta evita consultar a cada visita ao Dashboard
+const CACHE_USO_MS = 10 * 60 * 1000
+let cacheUso = null
+
+async function consumoNeon() {
+  const chave = process.env.NEON_API_KEY
+  if (!chave) return null
+
+  const headers = { Authorization: `Bearer ${chave}`, Accept: 'application/json' }
+  const pedir = async (caminho) => {
+    const resp = await fetch(`https://console.neon.tech/api/v2${caminho}`, { headers, signal: AbortSignal.timeout(8000) })
+    if (!resp.ok) throw new Error(`Neon API respondeu ${resp.status} em ${caminho}`)
+    return resp.json()
+  }
+
+  let projetoId = process.env.NEON_PROJECT_ID
+  if (!projetoId) {
+    const { projects } = await pedir('/projects')
+    if (projects?.length !== 1) throw new Error('Defina NEON_PROJECT_ID: a conta do Neon tem mais de um projeto.')
+    projetoId = projects[0].id
+  }
+
+  const { project } = await pedir(`/projects/${projetoId}`)
+  return {
+    espacoBytes: project.synthetic_storage_size ?? null,
+    transferenciaBytes: project.data_transfer_bytes ?? 0,
+    processamentoHoras: (project.compute_time_seconds ?? 0) / 3600,
+    renovaEm: project.consumption_period_end ?? null
+  }
+}
+
+app.get('/api/uso-banco', async (req, res) => {
+  if (cacheUso && Date.now() - cacheUso.em < CACHE_USO_MS) return res.json(cacheUso.dados)
+
+  try {
+    const { rows } = await pool.query('SELECT pg_database_size(current_database()) AS tamanho')
+
+    let neon = null
+    let avisoNeon = null
+    try {
+      neon = await consumoNeon()
+      if (!neon) avisoNeon = 'Consumo mensal indisponível: falta configurar a chave NEON_API_KEY no servidor.'
+    } catch (err) {
+      console.error('Consumo do Neon:', err.message)
+      avisoNeon = 'Não foi possível consultar o consumo mensal no Neon agora.'
+    }
+
+    const dados = {
+      limites: LIMITES_NEON,
+      espacoBytes: neon?.espacoBytes ?? Number(rows[0].tamanho),
+      transferenciaBytes: neon ? neon.transferenciaBytes : null,
+      processamentoHoras: neon ? neon.processamentoHoras : null,
+      renovaEm: neon?.renovaEm ?? null,
+      avisoNeon
+    }
+    // So guarda quando o Neon respondeu, para uma falha passageira nao ficar 10 minutos na tela
+    if (neon) cacheUso = { em: Date.now(), dados }
+    res.json(dados)
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'Erro ao carregar o uso do banco' })
+  }
+})
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK' })
 })

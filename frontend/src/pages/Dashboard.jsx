@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { formatarMoeda } from '../utils/formatters'
 import { API_URL } from '../config'
+import PainelUsoBanco from '../components/PainelUsoBanco'
 
 function Dashboard() {
   const [aniversariantesSemana, setAniversariantesSemana] = useState([])
@@ -82,6 +83,9 @@ function Dashboard() {
       ) : (
         <p>Nenhum aniversariante neste mes</p>
       )}
+
+      <h3 style={{ marginTop: '25px' }}>🗄️ Uso do Banco de Dados</h3>
+      <PainelUsoBanco />
     </div>
   )
 }
