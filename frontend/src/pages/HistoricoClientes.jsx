@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { formatarMoeda } from '../utils/formatters'
 import { API_URL } from '../config'
+import { compararTexto, ordenarClientes } from '../utils/ordenacao'
 
 const hoje = () => new Date().toISOString().slice(0, 10)
 
@@ -18,7 +19,7 @@ function HistoricoClientes() {
         axios.get(`${API_URL}/api/clientes`),
         axios.get(`${API_URL}/api/saidas`)
       ])
-      setClientes(resCli.data)
+      setClientes(ordenarClientes(resCli.data))
       setSaidas(resSai.data)
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
@@ -66,7 +67,7 @@ function HistoricoClientes() {
         produtosMap[s.produto_id].quantidade += s.quantidade
       })
 
-      return { cliente, compras, totalQuantidade, totalValor, produtosComprados: Object.values(produtosMap) }
+      return { cliente, compras, totalQuantidade, totalValor, produtosComprados: Object.values(produtosMap).sort((a, b) => compararTexto(a.nome, b.nome)) }
     })
 
   const grupoSelecionado = clienteSelecionadoId

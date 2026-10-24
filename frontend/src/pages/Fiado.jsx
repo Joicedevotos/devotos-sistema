@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { formatarMoeda } from '../utils/formatters'
 import { API_URL } from '../config'
+import { compararTexto } from '../utils/ordenacao'
 
 function Fiado() {
   const [saidas, setSaidas] = useState([])
@@ -22,7 +23,7 @@ function Fiado() {
   const fiadosEmAberto = saidas
     .filter(s => s.fiado && (s.status_fiado === 'pendente' || s.status_fiado === 'parcial'))
     .map(s => ({ ...s, valor_aberto: s.valor_vendido - s.valor_pago }))
-    .sort((a, b) => new Date(a.data_acordada) - new Date(b.data_acordada))
+    .sort((a, b) => compararTexto(a.cliente_nome, b.cliente_nome) || new Date(a.data_acordada) - new Date(b.data_acordada))
 
   const totalEmAberto = fiadosEmAberto.reduce((sum, s) => sum + s.valor_aberto, 0)
 

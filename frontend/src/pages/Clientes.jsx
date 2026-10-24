@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { API_URL } from '../config'
+import { ordenarClientes } from '../utils/ordenacao'
 
 const FORM_VAZIO = { nome: '', cpf: '', telefone: '', endereco: '', data_aniversario: '' }
 
@@ -18,7 +19,7 @@ function Clientes() {
   const carregarClientes = async () => {
     try {
       const res = await axios.get(`${API_URL}/api/clientes`)
-      setClientes(res.data || [])
+      setClientes(ordenarClientes(res.data || []))
       setLoading(false)
     } catch (error) {
       console.error('Erro:', error)

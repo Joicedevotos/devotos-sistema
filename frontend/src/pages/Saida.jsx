@@ -3,6 +3,8 @@ import axios from 'axios'
 import { formatarMoeda } from '../utils/formatters'
 import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { API_URL } from '../config'
+import { opcoesProduto } from '../utils/opcoesProduto'
+import { ordenarClientes, ordenarProdutos } from '../utils/ordenacao'
 
 const hoje = () => new Date().toISOString().slice(0, 10)
 
@@ -21,7 +23,7 @@ function Saida() {
   const [form, setForm] = useState({
     tipo: '',
     tamanho: '',
-    descricao: '',
+    produto_id: '',
     quantidade: '',
     cliente_id: '',
     data: hoje(),
@@ -37,8 +39,8 @@ function Saida() {
         axios.get(`${API_URL}/api/clientes`),
         axios.get(`${API_URL}/api/saidas`)
       ])
-      setProdutos(resProd.data)
-      setClientes(resCli.data)
+      setProdutos(ordenarProdutos(resProd.data))
+      setClientes(ordenarClientes(resCli.data))
       setSaidas(resSai.data)
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
@@ -49,40 +51,33 @@ function Saida() {
     carregarDados()
   }, [])
 
-  // descricoes disponiveis = dos produtos ja cadastrados que batem com o Produto + Tamanho escolhidos
-  const descricoesDisponiveis = useMemo(() => {
-    if (!form.tipo || !form.tamanho) return []
-    return produtos
-      .filter(p => p.tipo === form.tipo && p.tamanho === form.tamanho)
-      .map(p => (p.descricao || '').trim())
-      .filter((d, i, arr) => arr.indexOf(d) === i)
-  }, [produtos, form.tipo, form.tamanho])
+  // um item por produto cadastrado (pode haver descricoes repetidas com estoques diferentes)
+  const descricoesDisponiveis = useMemo(
+    () => opcoesProduto(produtos, form.tipo, form.tamanho),
+    [produtos, form.tipo, form.tamanho]
+  )
 
   const produtoSelecionado = useMemo(() => {
-    if (!form.tipo || !form.tamanho || !form.descricao) return null
-    return produtos.find(p =>
-      p.tipo === form.tipo &&
-      p.tamanho === form.tamanho &&
-      (p.descricao || '').trim() === form.descricao
-    ) || null
-  }, [produtos, form.tipo, form.tamanho, form.descricao])
+    if (!form.produto_id) return null
+    return produtos.find(p => String(p.id) === form.produto_id) || null
+  }, [produtos, form.produto_id])
 
   const handleChange = (e) => {
     const { name, value } = e.target
     if (name === 'tipo') {
       // ao trocar o produto, tamanho e descricao selecionados podem nao existir mais nas opcoes
-      setForm({ ...form, tipo: value, tamanho: '', descricao: '' })
+      setForm({ ...form, tipo: value, tamanho: '', produto_id: '' })
       return
     }
     if (name === 'tamanho') {
-      setForm({ ...form, tamanho: value, descricao: '' })
+      setForm({ ...form, tamanho: value, produto_id: '' })
       return
     }
     setForm({ ...form, [name]: value })
   }
 
   const limparForm = () => {
-    setForm({ tipo: '', tamanho: '', descricao: '', quantidade: '', cliente_id: '', data: hoje(), valor_vendido: '', forma_pagamento: 'dinheiro', data_acordada: '' })
+    setForm({ tipo: '', tamanho: '', produto_id: '', quantidade: '', cliente_id: '', data: hoje(), valor_vendido: '', forma_pagamento: 'dinheiro', data_acordada: '' })
   }
 
   const handleSubmit = async (e) => {
@@ -145,7 +140,7 @@ function Saida() {
             ))}
           </select>
 
-          <select name="descricao" value={form.descricao} onChange={handleChange} required disabled={!form.tamanho}>
+          <select name="produto_id" value={form.produto_id} onChange={handleChange} required disabled={!form.tamanho}>
             <option value="">
               {!form.tamanho
                 ? 'Selecione o Tamanho primeiro'
@@ -153,8 +148,8 @@ function Saida() {
                   ? 'Selecione a Descricao'
                   : 'Nenhum produto cadastrado para esse Tamanho'}
             </option>
-            {descricoesDisponiveis.map(d => (
-              <option key={d} value={d}>{d || '(sem descricao)'}</option>
+            {descricoesDisponiveis.map(o => (
+              <option key={o.id} value={o.id}>{o.label}</option>
             ))}
           </select>
 

@@ -3,6 +3,7 @@ import axios from 'axios'
 import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { formatarMoeda } from '../utils/formatters'
 import { API_URL } from '../config'
+import { ordenarProdutos } from '../utils/ordenacao'
 
 function FiltroEstoque() {
   const [produtos, setProdutos] = useState([])
@@ -15,7 +16,7 @@ function FiltroEstoque() {
 
   useEffect(() => {
     axios.get(`${API_URL}/api/produtos`)
-      .then(res => setProdutos(res.data))
+      .then(res => setProdutos(ordenarProdutos(res.data)))
       .catch(err => console.error('Erro ao carregar produtos:', err))
   }, [])
 

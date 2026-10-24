@@ -1,4 +1,4 @@
-export const TIPOS_PRODUTO = ['Camiseta', 'Baby Look', 'Infantil', 'Body Infantil']
+export const TIPOS_PRODUTO = ['Baby Look', 'Body Infantil', 'Camiseta', 'Infantil']
 
 export const TAMANHOS_POR_TIPO = {
   'Camiseta': ['PP', 'P', 'M', 'G', 'GG', 'XG', 'G1', 'G2', 'G3'],

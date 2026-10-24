@@ -4,6 +4,7 @@ import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { formatarMoeda } from '../utils/formatters'
 import { API_URL } from '../config'
 import { reduzirImagem } from '../utils/reduzirImagem'
+import { ordenarProdutos } from '../utils/ordenacao'
 
 const FORM_VAZIO = { tipo: '', tamanho: '', descricao: '', valor_custo: '', valor_venda: '', quantidade: '' }
 
@@ -27,7 +28,7 @@ function Produtos() {
       console.log('Carregando produtos...')
       const res = await axios.get(`${API_URL}/api/produtos`)
       console.log('Resposta:', res.data)
-      setProdutos(res.data)
+      setProdutos(ordenarProdutos(res.data))
     } catch (error) {
       console.error('Erro ao carregar:', error)
     }
