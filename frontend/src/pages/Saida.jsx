@@ -5,6 +5,7 @@ import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { API_URL } from '../config'
 import { opcoesProduto } from '../utils/opcoesProduto'
 import { compararTexto, ordenarClientes, ordenarProdutos } from '../utils/ordenacao'
+import { useOrdenacao } from '../utils/useOrdenacao'
 
 const hoje = () => new Date().toISOString().slice(0, 10)
 
@@ -131,26 +132,15 @@ function Saida() {
     s.produto_descricao ?? produtos.find(p => p.id === s.produto_id)?.descricao ?? ''
 
   // ordenacao do historico pelo cabecalho; padrao = mais recentes primeiro
-  const [ordem, setOrdem] = useState({ coluna: 'data', asc: false })
-  const COMPARADORES = {
-    data: (a, b) => (a.data || '').localeCompare(b.data || '') || a.id - b.id,
+  const porData = (a, b) => (a.data || '').localeCompare(b.data || '') || a.id - b.id
+  const { ordenada: saidasOrdenadas, Cabecalho } = useOrdenacao([...saidas].sort((a, b) => porData(b, a)), {
+    data: porData,
     produto: (a, b) => compararTexto(descricaoVenda(a), descricaoVenda(b)) || compararTexto(a.produto_nome, b.produto_nome),
     cliente: (a, b) => compararTexto(a.cliente_nome, b.cliente_nome),
     quantidade: (a, b) => a.quantidade - b.quantidade,
     valor: (a, b) => a.valor_vendido - b.valor_vendido,
     pagamento: (a, b) => compararTexto(textoPagamento(a), textoPagamento(b))
-  }
-  const saidasOrdenadas = [...saidas].sort((a, b) => {
-    const r = COMPARADORES[ordem.coluna](a, b) || COMPARADORES.data(b, a)
-    return ordem.asc ? r : -r
-  })
-  const ordenarPor = (coluna) =>
-    setOrdem(o => ({ coluna, asc: o.coluna === coluna ? !o.asc : coluna !== 'data' }))
-  const Cabecalho = ({ coluna, children }) => (
-    <th onClick={() => ordenarPor(coluna)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} title="Clique para ordenar">
-      {children} {ordem.coluna === coluna ? (ordem.asc ? '▲' : '▼') : <span style={{ opacity: 0.35 }}>⇅</span>}
-    </th>
-  )
+  }, { inicial: { coluna: 'data', asc: false }, descPrimeiro: ['data'] })
 
   return (
     <div className="page">

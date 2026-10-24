@@ -8,7 +8,7 @@ export const ordenarClientes = (clientes) =>
   [...clientes].sort((a, b) => compararTexto(a.nome, b.nome))
 
 // descricao em ordem alfabetica; empate -> tipo; tamanho na ordem da grade (PP, P, M...), nao alfabetica
-const posicaoTamanho = (p) => {
+export const posicaoTamanho = (p) => {
   const i = (TAMANHOS_POR_TIPO[p.tipo] || []).indexOf(p.tamanho)
   return i === -1 ? 999 : i
 }

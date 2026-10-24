@@ -4,7 +4,8 @@ import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { formatarMoeda } from '../utils/formatters'
 import { API_URL } from '../config'
 import { reduzirImagem } from '../utils/reduzirImagem'
-import { ordenarProdutos } from '../utils/ordenacao'
+import { compararTexto, ordenarProdutos, posicaoTamanho } from '../utils/ordenacao'
+import { useOrdenacao } from '../utils/useOrdenacao'
 
 const FORM_VAZIO = { tipo: '', tamanho: '', descricao: '', valor_custo: '', valor_venda: '', quantidade: '' }
 
@@ -104,6 +105,16 @@ O historico de vendas e entradas NAO sera apagado.`)) return
       alert('Erro: ' + (error.response?.data?.error || error.message))
     }
   }
+
+  // lista ja chega em ordem alfabetica de descricao; o cabecalho permite reordenar
+  const { ordenada: produtosOrdenados, Cabecalho } = useOrdenacao(produtos, {
+    tipo: (a, b) => compararTexto(a.tipo, b.tipo),
+    tamanho: (a, b) => compararTexto(a.tipo, b.tipo) || posicaoTamanho(a) - posicaoTamanho(b),
+    descricao: (a, b) => compararTexto(a.descricao, b.descricao),
+    custo: (a, b) => (a.valor_custo ?? -1) - (b.valor_custo ?? -1),
+    venda: (a, b) => (a.valor_venda ?? -1) - (b.valor_venda ?? -1),
+    quantidade: (a, b) => a.quantidade - b.quantidade
+  })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -301,17 +312,17 @@ O historico de vendas e entradas NAO sera apagado.`)) return
           <thead>
             <tr>
               <th>Imagem</th>
-              <th>Produto</th>
-              <th>Tamanho</th>
-              <th>Descricao</th>
-              <th>Valor Custo</th>
-              <th>Valor Venda</th>
-              <th>Quantidade</th>
+              <Cabecalho coluna="tipo">Produto</Cabecalho>
+              <Cabecalho coluna="tamanho">Tamanho</Cabecalho>
+              <Cabecalho coluna="descricao">Descricao</Cabecalho>
+              <Cabecalho coluna="custo">Valor Custo</Cabecalho>
+              <Cabecalho coluna="venda">Valor Venda</Cabecalho>
+              <Cabecalho coluna="quantidade">Quantidade</Cabecalho>
               <th>Acao</th>
             </tr>
           </thead>
           <tbody>
-            {produtos.map((p) => (
+            {produtosOrdenados.map((p) => (
               <tr key={p.id}>
                 <td>
                   {p.tem_imagem ? (
