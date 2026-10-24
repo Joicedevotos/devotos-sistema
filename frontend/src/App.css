@@ -644,3 +644,19 @@ tbody tr:hover {
     border-bottom: none;
   }
 }
+/* LOGO (mesma imagem do icone do app) */
+.logo-img {
+  border-radius: 8px;
+  vertical-align: middle;
+  margin-right: 8px;
+  object-fit: cover;
+}
+.logo-img-sidebar { width: 44px; height: 44px; }
+.logo-img-topbar { width: 30px; height: 30px; }
+.logo-img-login {
+  display: block;
+  width: 110px;
+  height: 110px;
+  margin: 0 auto 12px;
+  border-radius: 20px;
+}

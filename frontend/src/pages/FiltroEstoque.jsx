@@ -154,7 +154,7 @@ function FiltroEstoque() {
           {resultados.length > 0 ? (
             <>
               <div className="catalogo-print-titulo">
-                <h2>🙏 Loja Devotos — Catálogo</h2>
+                <h2><img src="/icon-192.png?v=2" alt="" className="logo-img logo-img-topbar" />Loja Devotos — Catálogo</h2>
                 <p>{descricaoFiltro()}</p>
               </div>
 

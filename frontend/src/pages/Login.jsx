@@ -31,7 +31,8 @@ function Login({ onLogin }) {
 
   return (
     <div style={{ padding: '2rem', textAlign: 'center' }}>
-      <h1>🙏 Loja Devotos</h1>
+      <img src="/icon-192.png?v=2" alt="Devotos" className="logo-img logo-img-login" />
+      <h1>Loja Devotos</h1>
       <p>Sistema de Controle de Estoque</p>
       <form onSubmit={handleLogin} style={{ maxWidth: '300px', margin: '2rem auto' }}>
         <input

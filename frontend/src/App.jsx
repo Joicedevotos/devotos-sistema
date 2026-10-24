@@ -86,7 +86,7 @@ function App() {
       {/* MENU LATERAL (telas grandes) */}
       <nav className="sidebar">
         <div className="logo">
-          <h2>🙏 Devotos</h2>
+          <h2><img src="/icon-192.png?v=2" alt="" className="logo-img logo-img-sidebar" />Devotos</h2>
         </div>
 
         {PAGINAS.map(p => (
@@ -108,7 +108,7 @@ function App() {
       <main className="content">
         {/* Cabeçalho estilo app (celular) */}
         <header className="app-topbar">
-          <span className="app-topbar-title">🙏 Devotos</span>
+          <span className="app-topbar-title"><img src="/icon-192.png?v=2" alt="" className="logo-img logo-img-topbar" />Devotos</span>
           <button className="app-topbar-avatar" onClick={handleLogout} title="Sair">
             {user?.username?.[0]?.toUpperCase() || '👤'}
           </button>
@@ -116,7 +116,7 @@ function App() {
 
         {/* Cabeçalho desktop */}
         <header className="top-bar">
-          <h1>🙏 Loja Devotos</h1>
+          <h1><img src="/icon-192.png?v=2" alt="" className="logo-img logo-img-topbar" />Loja Devotos</h1>
           <p>Bem-vindo, <strong>{user?.username}</strong>!</p>
         </header>
 
