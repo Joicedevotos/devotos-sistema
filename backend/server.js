@@ -319,14 +319,25 @@ app.put('/api/produtos/:id', (req, res) => {
   })
 })
 
+// Exclui so o cadastro: vendas e entradas continuam no historico (guardam produto_nome e valores),
+// apenas perdem o vinculo com o produto (produto_id = NULL), senao a chave estrangeira impediria a exclusao.
 app.delete('/api/produtos/:id', async (req, res) => {
+  const client = await pool.connect()
   try {
-    const result = await pool.query('DELETE FROM produtos WHERE id=$1 RETURNING imagem_hash', [req.params.id])
-    await apagarImagemSemUso(result.rows[0]?.imagem_hash)
+    await client.query('BEGIN')
+    await client.query('UPDATE saidas SET produto_id=NULL WHERE produto_id=$1', [req.params.id])
+    await client.query('UPDATE entradas SET produto_id=NULL WHERE produto_id=$1', [req.params.id])
+    const result = await client.query('DELETE FROM produtos WHERE id=$1 RETURNING imagem_hash', [req.params.id])
+    await client.query('COMMIT')
+    if (!result.rows[0]) return res.status(404).json({ error: 'Produto nao encontrado' })
+    await apagarImagemSemUso(result.rows[0].imagem_hash)
     res.json({ msg: 'deletado' })
   } catch (e) {
+    await client.query('ROLLBACK')
     console.error(e)
     res.status(500).json({ error: 'Erro ao deletar produto' })
+  } finally {
+    client.release()
   }
 })
 

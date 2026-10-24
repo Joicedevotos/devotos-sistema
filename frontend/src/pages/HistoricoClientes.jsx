@@ -63,8 +63,10 @@ function HistoricoClientes() {
 
       const produtosMap = {}
       compras.forEach(s => {
-        if (!produtosMap[s.produto_id]) produtosMap[s.produto_id] = { nome: s.produto_nome, quantidade: 0 }
-        produtosMap[s.produto_id].quantidade += s.quantidade
+        // produto_id fica NULL quando o cadastro do produto foi excluido; ai agrupa pelo nome salvo na venda
+        const chave = s.produto_id ?? 'nome:' + s.produto_nome
+        if (!produtosMap[chave]) produtosMap[chave] = { nome: s.produto_nome, quantidade: 0 }
+        produtosMap[chave].quantidade += s.quantidade
       })
 
       return { cliente, compras, totalQuantidade, totalValor, produtosComprados: Object.values(produtosMap).sort((a, b) => compararTexto(a.nome, b.nome)) }

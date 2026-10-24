@@ -88,6 +88,23 @@ function Produtos() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const excluirProduto = async (produto) => {
+    const nome = `${produto.tipo} ${produto.tamanho} — ${produto.descricao || '(sem descricao)'} (cód. ${produto.id}, estoque ${produto.quantidade})`
+    if (!window.confirm(`Excluir o cadastro deste produto?
+
+${nome}
+
+O historico de vendas e entradas NAO sera apagado.`)) return
+    try {
+      await axios.delete(`${API_URL}/api/produtos/${produto.id}`)
+      if (editingId === produto.id) limparForm()
+      carregarProdutos()
+      alert('Produto excluido!')
+    } catch (error) {
+      alert('Erro: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
@@ -312,12 +329,13 @@ function Produtos() {
                 </td>
                 <td>{p.tipo}</td>
                 <td>{p.tamanho}</td>
-                <td>{p.descricao}</td>
+                <td>{p.descricao}<div style={{ fontSize: '11px', color: '#999' }}>cód. {p.id}</div></td>
                 <td>{formatarMoeda(p.valor_custo)}</td>
                 <td>{formatarMoeda(p.valor_venda)}</td>
                 <td>{p.quantidade}</td>
                 <td>
                   <button onClick={() => iniciarEdicao(p)} style={{background: '#667eea', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '5px', cursor: 'pointer'}}>Editar</button>
+                  <button onClick={() => excluirProduto(p)} style={{background: '#e53e3e', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginLeft: '5px', marginTop: '4px'}}>Excluir</button>
                 </td>
               </tr>
             ))}
