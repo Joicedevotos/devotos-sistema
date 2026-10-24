@@ -4,7 +4,7 @@ import { formatarMoeda } from '../utils/formatters'
 import { TIPOS_PRODUTO, TAMANHOS_POR_TIPO } from '../constants/produtoOpcoes'
 import { API_URL } from '../config'
 import { opcoesProduto } from '../utils/opcoesProduto'
-import { ordenarClientes, ordenarProdutos } from '../utils/ordenacao'
+import { compararTexto, ordenarClientes, ordenarProdutos } from '../utils/ordenacao'
 
 const hoje = () => new Date().toISOString().slice(0, 10)
 
@@ -112,12 +112,45 @@ function Saida() {
     }
   }
 
-  const statusFiado = (s) => {
+  const textoPagamento = (s) => {
     if (!s.fiado) return FORMAS_PAGAMENTO.find(f => f.value === s.forma_pagamento)?.label || s.forma_pagamento
-    if (s.status_fiado === 'pago') return <span style={{ color: 'green', fontWeight: 'bold' }}>Fiado Pago</span>
-    if (s.status_fiado === 'parcial') return <span style={{ color: '#c77700', fontWeight: 'bold' }}>Fiado Parcial</span>
-    return <span style={{ color: 'red', fontWeight: 'bold' }}>Fiado Pendente</span>
+    if (s.status_fiado === 'pago') return 'Fiado Pago'
+    if (s.status_fiado === 'parcial') return 'Fiado Parcial'
+    if (s.status_fiado === 'devolvido') return 'Fiado Devolvido'
+    return 'Fiado Pendente'
   }
+
+  const CORES_FIADO = { pago: 'green', parcial: '#c77700', devolvido: '#667eea' }
+  const statusFiado = (s) => {
+    if (!s.fiado) return textoPagamento(s)
+    return <span style={{ color: CORES_FIADO[s.status_fiado] || 'red', fontWeight: 'bold' }}>{textoPagamento(s)}</span>
+  }
+
+  // vendas antigas sem descricao salva: pega do cadastro (se o produto ainda existir)
+  const descricaoVenda = (s) =>
+    s.produto_descricao ?? produtos.find(p => p.id === s.produto_id)?.descricao ?? ''
+
+  // ordenacao do historico pelo cabecalho; padrao = mais recentes primeiro
+  const [ordem, setOrdem] = useState({ coluna: 'data', asc: false })
+  const COMPARADORES = {
+    data: (a, b) => (a.data || '').localeCompare(b.data || '') || a.id - b.id,
+    produto: (a, b) => compararTexto(descricaoVenda(a), descricaoVenda(b)) || compararTexto(a.produto_nome, b.produto_nome),
+    cliente: (a, b) => compararTexto(a.cliente_nome, b.cliente_nome),
+    quantidade: (a, b) => a.quantidade - b.quantidade,
+    valor: (a, b) => a.valor_vendido - b.valor_vendido,
+    pagamento: (a, b) => compararTexto(textoPagamento(a), textoPagamento(b))
+  }
+  const saidasOrdenadas = [...saidas].sort((a, b) => {
+    const r = COMPARADORES[ordem.coluna](a, b) || COMPARADORES.data(b, a)
+    return ordem.asc ? r : -r
+  })
+  const ordenarPor = (coluna) =>
+    setOrdem(o => ({ coluna, asc: o.coluna === coluna ? !o.asc : coluna !== 'data' }))
+  const Cabecalho = ({ coluna, children }) => (
+    <th onClick={() => ordenarPor(coluna)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} title="Clique para ordenar">
+      {children} {ordem.coluna === coluna ? (ordem.asc ? '▲' : '▼') : <span style={{ opacity: 0.35 }}>⇅</span>}
+    </th>
+  )
 
   return (
     <div className="page">
@@ -203,19 +236,22 @@ function Saida() {
         <table className="movimentacoes-table">
           <thead>
             <tr>
-              <th>Data</th>
-              <th>Produto</th>
-              <th>Cliente</th>
-              <th>Quantidade</th>
-              <th>Valor Vendido</th>
-              <th>Pagamento</th>
+              <Cabecalho coluna="data">Data</Cabecalho>
+              <Cabecalho coluna="produto">Produto</Cabecalho>
+              <Cabecalho coluna="cliente">Cliente</Cabecalho>
+              <Cabecalho coluna="quantidade">Quantidade</Cabecalho>
+              <Cabecalho coluna="valor">Valor Vendido</Cabecalho>
+              <Cabecalho coluna="pagamento">Pagamento</Cabecalho>
             </tr>
           </thead>
           <tbody>
-            {[...saidas].reverse().map(s => (
+            {saidasOrdenadas.map(s => (
               <tr key={s.id}>
                 <td>{new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                <td>{s.produto_nome}</td>
+                <td>
+                  {s.produto_nome}
+                  {descricaoVenda(s) && <div style={{ fontSize: '12px', color: '#555' }}>{descricaoVenda(s)}</div>}
+                </td>
                 <td>{s.cliente_nome}</td>
                 <td>{s.quantidade}</td>
                 <td>{formatarMoeda(s.valor_vendido)}</td>

@@ -182,7 +182,15 @@ async function initDb() {
     );
 
     ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imagem_hash TEXT;
+    ALTER TABLE saidas ADD COLUMN IF NOT EXISTS produto_descricao TEXT;
   `)
+
+  // Vendas antigas nao guardavam a descricao da peca: copia do cadastro (so na 1a vez acha algo)
+  const descricoes = await pool.query(`
+    UPDATE saidas s SET produto_descricao = p.descricao
+    FROM produtos p WHERE s.produto_id = p.id AND s.produto_descricao IS NULL AND p.descricao IS NOT NULL
+  `)
+  if (descricoes.rowCount) console.log(`${descricoes.rowCount} vendas receberam a descricao da peca`)
 
   // Fotos antigas (salvas direto em produtos.imagem_dados) passam pra tabela imagens.
   // Roda tudo dentro do banco, sem trafegar as fotos; depois da 1a vez nao acha mais nada.
@@ -708,9 +716,9 @@ app.post('/api/saidas', async (req, res) => {
 
     const dataFinal = data || new Date().toISOString().slice(0, 10)
     const insertRes = await client.query(
-      `INSERT INTO saidas (produto_id, produto_nome, quantidade, data, cliente_id, cliente_nome, valor_custo, valor_venda_cadastrado, valor_vendido, forma_pagamento, fiado, data_acordada, status_fiado, valor_pago, pagamentos)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,'[]') RETURNING *`,
-      [produto.id, produto.nome, qtd, dataFinal, cliente.id, cliente.nome, produto.valor_custo, produto.valor_venda, valor, forma_pagamento, fiado, fiado ? data_acordada : null, fiado ? 'pendente' : null]
+      `INSERT INTO saidas (produto_id, produto_nome, produto_descricao, quantidade, data, cliente_id, cliente_nome, valor_custo, valor_venda_cadastrado, valor_vendido, forma_pagamento, fiado, data_acordada, status_fiado, valor_pago, pagamentos)
+       VALUES ($1,$2,$14,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,'[]') RETURNING *`,
+      [produto.id, produto.nome, qtd, dataFinal, cliente.id, cliente.nome, produto.valor_custo, produto.valor_venda, valor, forma_pagamento, fiado, fiado ? data_acordada : null, fiado ? 'pendente' : null, produto.descricao]
     )
 
     await client.query('COMMIT')

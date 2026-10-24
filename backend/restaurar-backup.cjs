@@ -45,6 +45,7 @@ const ESQUEMA = `
     fiado BOOLEAN DEFAULT FALSE, data_acordada TEXT, status_fiado TEXT, valor_pago DOUBLE PRECISION DEFAULT 0,
     pagamentos JSONB DEFAULT '[]'
   );
+  ALTER TABLE saidas ADD COLUMN IF NOT EXISTS produto_descricao TEXT;
   CREATE TABLE IF NOT EXISTS imagens (hash TEXT PRIMARY KEY, dados BYTEA NOT NULL, mime TEXT);
   ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imagem_hash TEXT;
 `;
@@ -133,7 +134,7 @@ async function inserir(client, tabela, linhas, colunas) {
   await inserir(client, 'saidas', t.saidas || [],
     ['id', 'produto_id', 'produto_nome', 'quantidade', 'data', 'cliente_id', 'cliente_nome', 'valor_custo',
       'valor_venda_cadastrado', 'valor_vendido', 'forma_pagamento', 'fiado', 'data_acordada', 'status_fiado',
-      'valor_pago', 'pagamentos']);
+      'valor_pago', 'pagamentos', 'produto_descricao']);
   await client.query('COMMIT');
 
   await client.end();
