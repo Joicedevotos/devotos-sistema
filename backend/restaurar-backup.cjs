@@ -46,6 +46,7 @@ const ESQUEMA = `
     pagamentos JSONB DEFAULT '[]'
   );
   ALTER TABLE saidas ADD COLUMN IF NOT EXISTS produto_descricao TEXT;
+  ALTER TABLE entradas ADD COLUMN IF NOT EXISTS saida_id INTEGER;
   CREATE TABLE IF NOT EXISTS imagens (hash TEXT PRIMARY KEY, dados BYTEA NOT NULL, mime TEXT);
   ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imagem_hash TEXT;
 `;
@@ -130,7 +131,7 @@ async function inserir(client, tabela, linhas, colunas) {
   await inserir(client, 'clientes', t.clientes || [],
     ['id', 'nome', 'cpf', 'telefone', 'endereco', 'data_aniversario']);
   await inserir(client, 'entradas', t.entradas || [],
-    ['id', 'produto_id', 'produto_nome', 'quantidade', 'data', 'subtipo', 'cliente_id', 'cliente_nome', 'fiado_baixado']);
+    ['id', 'produto_id', 'produto_nome', 'quantidade', 'data', 'subtipo', 'cliente_id', 'cliente_nome', 'fiado_baixado', 'saida_id']);
   await inserir(client, 'saidas', t.saidas || [],
     ['id', 'produto_id', 'produto_nome', 'quantidade', 'data', 'cliente_id', 'cliente_nome', 'valor_custo',
       'valor_venda_cadastrado', 'valor_vendido', 'forma_pagamento', 'fiado', 'data_acordada', 'status_fiado',

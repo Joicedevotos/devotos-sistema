@@ -14,6 +14,10 @@ function Entrada() {
   const [clientes, setClientes] = useState([])
   const [entradas, setEntradas] = useState([])
   const [form, setForm] = useState(FORM_VAZIO)
+  // entrada sendo corrigida (null = registrando uma nova)
+  const [editando, setEditando] = useState(null)
+  // produto da entrada ja excluido do cadastro: a correcao mantem o produto gravado
+  const produtoExcluido = editando && !editando.produto_id
 
   const carregarDados = async () => {
     try {
@@ -61,11 +65,46 @@ function Entrada() {
 
   const limparForm = () => {
     setForm(FORM_VAZIO)
+    setEditando(null)
+  }
+
+  const iniciarEdicao = (entrada) => {
+    const produto = produtos.find(p => p.id === entrada.produto_id)
+    setEditando(entrada)
+    setForm({
+      tipo: produto?.tipo || '',
+      tamanho: produto?.tamanho || '',
+      produto_id: produto ? String(produto.id) : '',
+      quantidade: entrada.quantidade ?? '',
+      data: entrada.data || hoje(),
+      subtipo: entrada.subtipo === 'devolucao' ? 'devolucao' : 'compra',
+      cliente_id: entrada.cliente_id ? String(entrada.cliente_id) : ''
+    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // descricao da peca vem do cadastro (se o produto ainda existir)
+  const descricaoEntrada = (e) => produtos.find(p => p.id === e.produto_id)?.descricao || ''
+
+  const descreverEntrada = (e) =>
+    `${new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR')} — ${e.subtipo === 'devolucao' ? 'Devolucao' : 'Compra'} — ${e.produto_nome}${descricaoEntrada(e) ? ' ' + descricaoEntrada(e) : ''} — ${e.quantidade} un.${e.cliente_nome ? ' — ' + e.cliente_nome : ''}`
+
+  const excluirEntrada = async (entrada) => {
+    const aviso = entrada.fiado_baixado ? '\n\nO fiado que essa devolucao tinha baixado volta a ficar em aberto.' : ''
+    if (!window.confirm(`Excluir esta entrada?\n\n${descreverEntrada(entrada)}\n\nAs pecas saem do estoque.${aviso}`)) return
+    try {
+      await axios.delete(`${API_URL}/api/entradas/${entrada.id}`)
+      if (editando?.id === entrada.id) limparForm()
+      carregarDados()
+      alert('Entrada excluida! O estoque foi ajustado.')
+    } catch (error) {
+      alert('Erro: ' + (error.response?.data?.error || error.message))
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!produtoSelecionado) {
+    if (!produtoSelecionado && !produtoExcluido) {
       alert('Selecione o Produto, o Tamanho e a Descricao')
       return
     }
@@ -73,20 +112,24 @@ function Entrada() {
       alert('Selecione o cliente que devolveu o produto')
       return
     }
+    const dados = {
+      produto_id: produtoSelecionado ? produtoSelecionado.id : null,
+      quantidade: form.quantidade,
+      data: form.data,
+      subtipo: form.subtipo,
+      cliente_id: form.subtipo === 'devolucao' ? form.cliente_id : null
+    }
     try {
-      const res = await axios.post(`${API_URL}/api/entradas`, {
-        produto_id: produtoSelecionado.id,
-        quantidade: form.quantidade,
-        data: form.data,
-        subtipo: form.subtipo,
-        cliente_id: form.subtipo === 'devolucao' ? form.cliente_id : null
-      })
+      const res = editando
+        ? await axios.put(`${API_URL}/api/entradas/${editando.id}`, dados)
+        : await axios.post(`${API_URL}/api/entradas`, dados)
       limparForm()
       carregarDados()
+      const acao = editando ? 'Entrada corrigida' : 'Entrada registrada'
       if (res.data.fiado_baixado) {
-        alert('Entrada registrada! Esse produto estava fiado com o cliente e o status foi atualizado para "Produto Devolvido".')
+        alert(`${acao}! Esse produto estava fiado com o cliente e o status foi atualizado para "Produto Devolvido".`)
       } else {
-        alert('Entrada registrada com sucesso!')
+        alert(`${acao} com sucesso!`)
       }
     } catch (error) {
       alert('Erro: ' + (error.response?.data?.error || error.message))
@@ -98,8 +141,18 @@ function Entrada() {
       <h2>📥 Entrada/Devolução para Estoque</h2>
 
       <div className="form-section">
-        <h3>Nova Entrada</h3>
+        <h3>{editando ? 'Corrigir Entrada' : 'Nova Entrada'}</h3>
+        {editando && (
+          <p style={{ fontSize: '13px', color: '#c77700', margin: '0 0 10px' }}>
+            Corrigindo: {descreverEntrada(editando)}
+          </p>
+        )}
         <form onSubmit={handleSubmit}>
+          {produtoExcluido ? (
+            <p style={{ fontSize: '13px', color: '#555', margin: '0 0 5px' }}>
+              O cadastro desse produto foi excluido — a entrada continua com <strong>{editando.produto_nome}</strong>.
+            </p>
+          ) : (<>
           <select name="tipo" value={form.tipo} onChange={handleChange} required>
             <option value="">Selecione o Produto</option>
             {TIPOS_PRODUTO.map(t => (
@@ -132,6 +185,7 @@ function Entrada() {
               Selecionado: <strong>{produtoSelecionado.nome}</strong> (estoque atual: {produtoSelecionado.quantidade})
             </p>
           )}
+          </>)}
 
           <input type="date" name="data" value={form.data} onChange={handleChange} required />
 
@@ -151,12 +205,16 @@ function Entrada() {
 
           <input type="number" name="quantidade" placeholder="Quantidade" value={form.quantidade} onChange={handleChange} required min="1" />
 
-          <button type="submit">Registrar Entrada</button>
+          <button type="submit">{editando ? 'Salvar Correcao' : 'Registrar Entrada'}</button>
+          {editando && (
+            <button type="button" onClick={limparForm} style={{ background: '#999' }}>Cancelar</button>
+          )}
         </form>
       </div>
 
       <h3>Historico de Entradas ({entradas.length})</h3>
       {entradas.length > 0 ? (
+        <div className="tabela-rolavel">
         <table className="movimentacoes-table">
           <thead>
             <tr>
@@ -166,13 +224,17 @@ function Entrada() {
               <th>Cliente (devolucao)</th>
               <th>Quantidade</th>
               <th>Observacao</th>
+              <th>Acoes</th>
             </tr>
           </thead>
           <tbody>
             {[...entradas].reverse().map(e => (
               <tr key={e.id}>
                 <td>{new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                <td>{e.produto_nome}</td>
+                <td>
+                  {e.produto_nome}
+                  {descricaoEntrada(e) && <div style={{ fontSize: '12px', color: '#555' }}>{descricaoEntrada(e)}</div>}
+                </td>
                 <td>{e.subtipo === 'devolucao' ? 'Devolucao' : 'Compra'}</td>
                 <td>{e.cliente_nome || '-'}</td>
                 <td>{e.quantidade}</td>
@@ -181,10 +243,15 @@ function Entrada() {
                     <span style={{ color: '#667eea', fontWeight: 'bold' }}>Fiado baixado</span>
                   ) : '-'}
                 </td>
+                <td>
+                  <button onClick={() => iniciarEdicao(e)} style={{background: '#667eea', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '5px', cursor: 'pointer'}}>Editar</button>
+                  <button onClick={() => excluirEntrada(e)} style={{background: '#e53e3e', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginLeft: '5px', marginTop: '4px'}}>Excluir</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       ) : (
         <p>Nenhuma entrada registrada</p>
       )}

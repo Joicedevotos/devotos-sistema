@@ -324,6 +324,15 @@ table {
   margin-top: 15px;
 }
 
+/* tabela larga rola de lado dentro do quadro, sem empurrar a pagina inteira */
+.tabela-rolavel {
+  overflow-x: auto;
+}
+
+.content {
+  min-width: 0;
+}
+
 thead {
   background: #667eea;
   color: white;

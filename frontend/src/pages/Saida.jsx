@@ -21,6 +21,8 @@ function Saida() {
   const [produtos, setProdutos] = useState([])
   const [clientes, setClientes] = useState([])
   const [saidas, setSaidas] = useState([])
+  // venda sendo corrigida (null = registrando uma nova)
+  const [editando, setEditando] = useState(null)
   const [form, setForm] = useState({
     tipo: '',
     tamanho: '',
@@ -79,11 +81,48 @@ function Saida() {
 
   const limparForm = () => {
     setForm({ tipo: '', tamanho: '', produto_id: '', quantidade: '', cliente_id: '', data: hoje(), valor_vendido: '', forma_pagamento: 'dinheiro', data_acordada: '' })
+    setEditando(null)
+  }
+
+  // produto da venda ja excluido do cadastro: a correcao mantem o produto gravado na venda
+  const produtoExcluido = editando && !editando.produto_id
+
+  const iniciarEdicao = (s) => {
+    const produto = produtos.find(p => p.id === s.produto_id)
+    setEditando(s)
+    setForm({
+      tipo: produto?.tipo || '',
+      tamanho: produto?.tamanho || '',
+      produto_id: produto ? String(produto.id) : '',
+      quantidade: s.quantidade ?? '',
+      cliente_id: s.cliente_id ? String(s.cliente_id) : '',
+      data: s.data || hoje(),
+      valor_vendido: s.valor_vendido ?? '',
+      forma_pagamento: s.forma_pagamento || 'dinheiro',
+      data_acordada: s.data_acordada || ''
+    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const descreverVenda = (s) =>
+    `${new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR')} — ${s.produto_nome}${descricaoVenda(s) ? ' ' + descricaoVenda(s) : ''} — ${s.cliente_nome} — ${s.quantidade} un. — ${formatarMoeda(s.valor_vendido)}`
+
+  const excluirVenda = async (s) => {
+    const aviso = s.fiado && s.valor_pago > 0 ? `\n\nATENCAO: os pagamentos ja registrados desse fiado (${formatarMoeda(s.valor_pago)}) tambem serao apagados.` : ''
+    if (!window.confirm(`Excluir esta venda?\n\n${descreverVenda(s)}\n\nAs pecas voltam para o estoque.${aviso}`)) return
+    try {
+      await axios.delete(`${API_URL}/api/saidas/${s.id}`)
+      if (editando?.id === s.id) limparForm()
+      carregarDados()
+      alert('Venda excluida! As pecas voltaram para o estoque.')
+    } catch (error) {
+      alert('Erro: ' + (error.response?.data?.error || error.message))
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!produtoSelecionado) {
+    if (!produtoSelecionado && !produtoExcluido) {
       alert('Selecione o Produto, o Tamanho e a Descricao')
       return
     }
@@ -95,19 +134,26 @@ function Saida() {
       alert('Informe a data acordada para pagamento do fiado')
       return
     }
+    if (editando?.fiado && editando.valor_pago > 0 && form.forma_pagamento !== 'fiado' &&
+      !window.confirm(`Essa venda tinha ${formatarMoeda(editando.valor_pago)} de pagamentos de fiado registrados. Ao trocar a forma de pagamento, esses pagamentos serao apagados. Continuar?`)) return
+    const dados = {
+      produto_id: produtoSelecionado ? produtoSelecionado.id : null,
+      quantidade: form.quantidade,
+      cliente_id: form.cliente_id,
+      data: form.data,
+      valor_vendido: form.valor_vendido,
+      forma_pagamento: form.forma_pagamento,
+      data_acordada: form.forma_pagamento === 'fiado' ? form.data_acordada : null
+    }
     try {
-      await axios.post(`${API_URL}/api/saidas`, {
-        produto_id: produtoSelecionado.id,
-        quantidade: form.quantidade,
-        cliente_id: form.cliente_id,
-        data: form.data,
-        valor_vendido: form.valor_vendido,
-        forma_pagamento: form.forma_pagamento,
-        data_acordada: form.forma_pagamento === 'fiado' ? form.data_acordada : null
-      })
+      if (editando) {
+        await axios.put(`${API_URL}/api/saidas/${editando.id}`, dados)
+      } else {
+        await axios.post(`${API_URL}/api/saidas`, dados)
+      }
       limparForm()
       carregarDados()
-      alert('Saida registrada com sucesso!')
+      alert(editando ? 'Venda corrigida com sucesso!' : 'Saida registrada com sucesso!')
     } catch (error) {
       alert('Erro: ' + (error.response?.data?.error || error.message))
     }
@@ -147,8 +193,18 @@ function Saida() {
       <h2>📤 Registro de Vendas</h2>
 
       <div className="form-section">
-        <h3>Nova Saida (Venda)</h3>
+        <h3>{editando ? 'Corrigir Venda' : 'Nova Saida (Venda)'}</h3>
+        {editando && (
+          <p style={{ fontSize: '13px', color: '#c77700', margin: '0 0 10px' }}>
+            Corrigindo: {descreverVenda(editando)}
+          </p>
+        )}
         <form onSubmit={handleSubmit}>
+          {produtoExcluido ? (
+            <p style={{ fontSize: '13px', color: '#555', margin: '0 0 5px' }}>
+              O cadastro desse produto foi excluido — a venda continua com <strong>{editando.produto_nome}</strong>.
+            </p>
+          ) : (<>
           <select name="tipo" value={form.tipo} onChange={handleChange} required>
             <option value="">Selecione o Produto</option>
             {TIPOS_PRODUTO.map(t => (
@@ -183,6 +239,7 @@ function Saida() {
               <span>Valor de Venda Cadastrado: <strong>{formatarMoeda(produtoSelecionado.valor_venda)}</strong></span>
             </div>
           )}
+          </>)}
 
           <select name="cliente_id" value={form.cliente_id} onChange={handleChange} required>
             <option value="">Selecione o cliente comprador</option>
@@ -217,12 +274,16 @@ function Saida() {
             </div>
           )}
 
-          <button type="submit">Registrar Saida</button>
+          <button type="submit">{editando ? 'Salvar Correcao' : 'Registrar Saida'}</button>
+          {editando && (
+            <button type="button" onClick={limparForm} style={{ background: '#999' }}>Cancelar</button>
+          )}
         </form>
       </div>
 
       <h3>Historico de Saidas ({saidas.length})</h3>
       {saidas.length > 0 ? (
+        <div className="tabela-rolavel">
         <table className="movimentacoes-table">
           <thead>
             <tr>
@@ -232,6 +293,7 @@ function Saida() {
               <Cabecalho coluna="quantidade">Quantidade</Cabecalho>
               <Cabecalho coluna="valor">Valor Vendido</Cabecalho>
               <Cabecalho coluna="pagamento">Pagamento</Cabecalho>
+              <th>Acoes</th>
             </tr>
           </thead>
           <tbody>
@@ -246,10 +308,15 @@ function Saida() {
                 <td>{s.quantidade}</td>
                 <td>{formatarMoeda(s.valor_vendido)}</td>
                 <td>{statusFiado(s)}</td>
+                <td>
+                  <button onClick={() => iniciarEdicao(s)} style={{background: '#667eea', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '5px', cursor: 'pointer'}}>Editar</button>
+                  <button onClick={() => excluirVenda(s)} style={{background: '#e53e3e', color: 'white', padding: '5px 10px', border: 'none', borderRadius: '5px', cursor: 'pointer', marginLeft: '5px', marginTop: '4px'}}>Excluir</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       ) : (
         <p>Nenhuma saida registrada</p>
       )}

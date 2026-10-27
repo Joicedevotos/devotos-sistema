@@ -183,6 +183,7 @@ async function initDb() {
 
     ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imagem_hash TEXT;
     ALTER TABLE saidas ADD COLUMN IF NOT EXISTS produto_descricao TEXT;
+    ALTER TABLE entradas ADD COLUMN IF NOT EXISTS saida_id INTEGER;
   `)
 
   // Vendas antigas nao guardavam a descricao da peca: copia do cadastro (so na 1a vez acha algo)
@@ -600,69 +601,186 @@ app.get('/api/clientes/aniversariantes-mes', async (req, res) => {
   }
 })
 
+// Erro de validacao dentro de uma transacao: vira resposta com a mensagem pro usuario
+class ErroUsuario extends Error {
+  constructor(mensagem, status = 400) {
+    super(mensagem)
+    this.status = status
+  }
+}
+
+const responderErro = (res, e, mensagemPadrao) => {
+  if (e instanceof ErroUsuario) return res.status(e.status).json({ error: e.message })
+  console.error(e)
+  res.status(500).json({ error: mensagemPadrao })
+}
+
+// Status de um fiado conforme o que ja foi pago
+const statusPorPagamento = (valorPago, valorVendido) =>
+  valorPago >= valorVendido - 0.009 ? 'pago' : valorPago > 0 ? 'parcial' : 'pendente'
+
+// Depois de desfazer/refazer movimentacoes, o estoque nao pode ficar negativo
+const conferirEstoque = async (client, produtoId) => {
+  if (!produtoId) return
+  const r = await client.query('SELECT quantidade FROM produtos WHERE id=$1', [produtoId])
+  if (r.rows[0] && r.rows[0].quantidade < 0) {
+    throw new ErroUsuario(`Nao da: o estoque desse produto ficaria negativo (${r.rows[0].quantidade}). Provavelmente as pecas ja foram vendidas.`)
+  }
+}
+
 // ==================== ENTRADAS ====================
-app.post('/api/entradas', async (req, res) => {
-  const { produto_id, quantidade, data, subtipo, cliente_id } = req.body
+// Le e valida os dados do formulario de entrada (produto_id vazio = manter o produto do registro, se for edicao)
+async function prepararEntrada(client, body, entradaAntiga = null) {
+  const { produto_id, quantidade, data, subtipo, cliente_id } = body
   const qtd = parseInt(quantidade)
-  if (!qtd || qtd <= 0) return res.status(400).json({ error: 'Quantidade invalida' })
+  if (!qtd || qtd <= 0) throw new ErroUsuario('Quantidade invalida')
   const tipoEntrada = subtipo === 'devolucao' ? 'devolucao' : 'compra'
 
+  let produto = null
+  const produtoId = produto_id || entradaAntiga?.produto_id
+  if (produtoId) {
+    const produtoRes = await client.query(`SELECT ${PRODUTO_CAMPOS} FROM produtos WHERE id=$1 FOR UPDATE`, [produtoId])
+    produto = produtoRes.rows[0]
+    if (!produto) throw new ErroUsuario('Produto nao encontrado', 404)
+  } else if (!entradaAntiga) {
+    throw new ErroUsuario('Selecione o produto')
+  }
+
+  let cliente = null
+  if (tipoEntrada === 'devolucao') {
+    const clienteRes = await client.query('SELECT * FROM clientes WHERE id=$1', [cliente_id])
+    cliente = clienteRes.rows[0]
+    if (!cliente) throw new ErroUsuario('Selecione o cliente que devolveu')
+  }
+
+  return { qtd, tipoEntrada, produto, cliente, data: data || new Date().toISOString().slice(0, 10) }
+}
+
+// Soma no estoque e, se for devolucao, baixa um fiado aberto do cliente. Devolve o id da venda baixada.
+async function aplicarEntrada(client, { qtd, tipoEntrada, produto, cliente }) {
+  if (!produto) return null
+  let saidaBaixadaId = null
+
+  if (tipoEntrada === 'devolucao') {
+    // Se o cliente tinha esse produto fiado (pendente ou parcial), a devolucao baixa o fiado.
+    // Prioriza um fiado aberto com a mesma quantidade; senao pega qualquer fiado aberto desse par cliente+produto.
+    let fiadoRes = await client.query(
+      `SELECT id FROM saidas WHERE cliente_id=$1 AND produto_id=$2 AND fiado=TRUE AND status_fiado IN ('pendente','parcial') AND quantidade=$3 ORDER BY id LIMIT 1`,
+      [cliente.id, produto.id, qtd]
+    )
+    if (!fiadoRes.rows[0]) {
+      fiadoRes = await client.query(
+        `SELECT id FROM saidas WHERE cliente_id=$1 AND produto_id=$2 AND fiado=TRUE AND status_fiado IN ('pendente','parcial') ORDER BY id LIMIT 1`,
+        [cliente.id, produto.id]
+      )
+    }
+
+    if (fiadoRes.rows[0]) {
+      saidaBaixadaId = fiadoRes.rows[0].id
+      await client.query(`UPDATE saidas SET status_fiado='devolvido' WHERE id=$1`, [saidaBaixadaId])
+    }
+  }
+
+  await client.query('UPDATE produtos SET quantidade = quantidade + $1 WHERE id=$2', [qtd, produto.id])
+  return saidaBaixadaId
+}
+
+// Volta o estoque e reabre o fiado que essa entrada tinha baixado (o estoque e conferido depois, por quem chamou)
+async function desfazerEntrada(client, entrada) {
+  if (entrada.produto_id) {
+    await client.query('UPDATE produtos SET quantidade = quantidade - $1 WHERE id=$2', [entrada.quantidade, entrada.produto_id])
+  }
+  if (!entrada.fiado_baixado) return
+
+  // entradas antigas nao guardavam qual venda baixaram: pega a ultima devolvida desse cliente+produto
+  let saidaRes
+  if (entrada.saida_id) {
+    saidaRes = await client.query('SELECT * FROM saidas WHERE id=$1 FOR UPDATE', [entrada.saida_id])
+  } else {
+    saidaRes = await client.query(
+      `SELECT * FROM saidas WHERE cliente_id=$1 AND produto_id=$2 AND status_fiado='devolvido' ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+      [entrada.cliente_id, entrada.produto_id]
+    )
+  }
+  const saida = saidaRes.rows[0]
+  if (saida && saida.status_fiado === 'devolvido') {
+    await client.query('UPDATE saidas SET status_fiado=$1 WHERE id=$2', [statusPorPagamento(saida.valor_pago, saida.valor_vendido), saida.id])
+  }
+}
+
+app.post('/api/entradas', async (req, res) => {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    const dados = await prepararEntrada(client, req.body)
+    const saidaBaixadaId = await aplicarEntrada(client, dados)
+    const { produto, cliente } = dados
 
-    const produtoRes = await client.query(`SELECT ${PRODUTO_CAMPOS} FROM produtos WHERE id=$1 FOR UPDATE`, [produto_id])
-    const produto = produtoRes.rows[0]
-    if (!produto) {
-      await client.query('ROLLBACK')
-      return res.status(404).json({ error: 'Produto nao encontrado' })
-    }
-
-    let cliente = null
-    let saidaBaixadaId = null
-
-    if (tipoEntrada === 'devolucao') {
-      const clienteRes = await client.query('SELECT * FROM clientes WHERE id=$1', [cliente_id])
-      cliente = clienteRes.rows[0]
-      if (!cliente) {
-        await client.query('ROLLBACK')
-        return res.status(400).json({ error: 'Selecione o cliente que devolveu' })
-      }
-
-      // Se o cliente tinha esse produto fiado (pendente ou parcial), a devolucao baixa o fiado.
-      // Prioriza um fiado aberto com a mesma quantidade; senao pega qualquer fiado aberto desse par cliente+produto.
-      let fiadoRes = await client.query(
-        `SELECT id FROM saidas WHERE cliente_id=$1 AND produto_id=$2 AND fiado=TRUE AND status_fiado IN ('pendente','parcial') AND quantidade=$3 ORDER BY id LIMIT 1`,
-        [cliente.id, produto.id, qtd]
-      )
-      if (!fiadoRes.rows[0]) {
-        fiadoRes = await client.query(
-          `SELECT id FROM saidas WHERE cliente_id=$1 AND produto_id=$2 AND fiado=TRUE AND status_fiado IN ('pendente','parcial') ORDER BY id LIMIT 1`,
-          [cliente.id, produto.id]
-        )
-      }
-
-      if (fiadoRes.rows[0]) {
-        saidaBaixadaId = fiadoRes.rows[0].id
-        await client.query(`UPDATE saidas SET status_fiado='devolvido' WHERE id=$1`, [saidaBaixadaId])
-      }
-    }
-
-    await client.query('UPDATE produtos SET quantidade = quantidade + $1 WHERE id=$2', [qtd, produto.id])
-
-    const dataFinal = data || new Date().toISOString().slice(0, 10)
     const insertRes = await client.query(
-      `INSERT INTO entradas (produto_id, produto_nome, quantidade, data, subtipo, cliente_id, cliente_nome, fiado_baixado)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [produto.id, produto.nome, qtd, dataFinal, tipoEntrada, cliente ? cliente.id : null, cliente ? cliente.nome : null, !!saidaBaixadaId]
+      `INSERT INTO entradas (produto_id, produto_nome, quantidade, data, subtipo, cliente_id, cliente_nome, fiado_baixado, saida_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [produto.id, produto.nome, dados.qtd, dados.data, dados.tipoEntrada, cliente ? cliente.id : null, cliente ? cliente.nome : null, !!saidaBaixadaId, saidaBaixadaId]
     )
 
     await client.query('COMMIT')
     res.status(201).json(insertRes.rows[0])
   } catch (e) {
     await client.query('ROLLBACK')
-    console.error(e)
-    res.status(500).json({ error: 'Erro ao registrar entrada' })
+    responderErro(res, e, 'Erro ao registrar entrada')
+  } finally {
+    client.release()
+  }
+})
+
+// Editar = desfazer a entrada antiga (estoque e fiado) e aplicar de novo com os dados corrigidos
+app.put('/api/entradas/:id', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const antigaRes = await client.query('SELECT * FROM entradas WHERE id=$1 FOR UPDATE', [req.params.id])
+    const antiga = antigaRes.rows[0]
+    if (!antiga) throw new ErroUsuario('Entrada nao encontrada', 404)
+
+    await desfazerEntrada(client, antiga)
+    const dados = await prepararEntrada(client, req.body, antiga)
+    const saidaBaixadaId = await aplicarEntrada(client, dados)
+    await conferirEstoque(client, antiga.produto_id)
+    const { produto, cliente } = dados
+
+    const updateRes = await client.query(
+      `UPDATE entradas SET produto_id=$1, produto_nome=$2, quantidade=$3, data=$4, subtipo=$5, cliente_id=$6, cliente_nome=$7, fiado_baixado=$8, saida_id=$9
+       WHERE id=$10 RETURNING *`,
+      [produto ? produto.id : null, produto ? produto.nome : antiga.produto_nome, dados.qtd, dados.data, dados.tipoEntrada,
+        cliente ? cliente.id : null, cliente ? cliente.nome : null, !!saidaBaixadaId, saidaBaixadaId, antiga.id]
+    )
+
+    await client.query('COMMIT')
+    res.json(updateRes.rows[0])
+  } catch (e) {
+    await client.query('ROLLBACK')
+    responderErro(res, e, 'Erro ao editar entrada')
+  } finally {
+    client.release()
+  }
+})
+
+app.delete('/api/entradas/:id', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const entradaRes = await client.query('SELECT * FROM entradas WHERE id=$1 FOR UPDATE', [req.params.id])
+    const entrada = entradaRes.rows[0]
+    if (!entrada) throw new ErroUsuario('Entrada nao encontrada', 404)
+
+    await desfazerEntrada(client, entrada)
+    await conferirEstoque(client, entrada.produto_id)
+    await client.query('DELETE FROM entradas WHERE id=$1', [entrada.id])
+
+    await client.query('COMMIT')
+    res.json({ msg: 'deletado' })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    responderErro(res, e, 'Erro ao excluir entrada')
   } finally {
     client.release()
   }
@@ -727,6 +845,109 @@ app.post('/api/saidas', async (req, res) => {
     await client.query('ROLLBACK')
     console.error(e)
     res.status(500).json({ error: 'Erro ao registrar saida' })
+  } finally {
+    client.release()
+  }
+})
+
+// Corrigir uma venda: devolve ao estoque o que ela tinha tirado e baixa de novo com os dados corrigidos
+app.put('/api/saidas/:id', async (req, res) => {
+  const { produto_id, quantidade, cliente_id, valor_vendido, forma_pagamento, data_acordada, data } = req.body
+  const qtd = parseInt(quantidade)
+  if (!qtd || qtd <= 0) return res.status(400).json({ error: 'Quantidade invalida' })
+
+  const valor = parseFloat(valor_vendido)
+  if (isNaN(valor) || valor < 0) return res.status(400).json({ error: 'Valor vendido invalido' })
+
+  const fiado = forma_pagamento === 'fiado'
+  if (fiado && !data_acordada) return res.status(400).json({ error: 'Informe a data acordada para pagamento' })
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+
+    const saidaRes = await client.query('SELECT * FROM saidas WHERE id=$1 FOR UPDATE', [req.params.id])
+    const saida = saidaRes.rows[0]
+    if (!saida) throw new ErroUsuario('Venda nao encontrada', 404)
+
+    if (saida.produto_id) {
+      await client.query('UPDATE produtos SET quantidade = quantidade + $1 WHERE id=$2', [saida.quantidade, saida.produto_id])
+    }
+
+    // produto_id vazio = manter o produto da venda (ex.: cadastro do produto ja foi excluido)
+    const produtoId = produto_id ? parseInt(produto_id) : saida.produto_id
+    let produto = null
+    if (produtoId) {
+      const produtoRes = await client.query(`SELECT ${PRODUTO_CAMPOS} FROM produtos WHERE id=$1 FOR UPDATE`, [produtoId])
+      produto = produtoRes.rows[0]
+      if (!produto) throw new ErroUsuario('Produto nao encontrado', 404)
+      if (produto.quantidade < qtd) throw new ErroUsuario('Estoque insuficiente para essa saida')
+      await client.query('UPDATE produtos SET quantidade = quantidade - $1 WHERE id=$2', [qtd, produto.id])
+    }
+
+    const clienteRes = await client.query('SELECT * FROM clientes WHERE id=$1', [cliente_id])
+    const cliente = clienteRes.rows[0]
+    if (!cliente) throw new ErroUsuario('Selecione o cliente comprador')
+
+    // mesmo produto: mantem nome/descricao/valores gravados na epoca da venda
+    const mesmoProduto = !produto || produto.id === saida.produto_id
+    const produtoNome = mesmoProduto ? saida.produto_nome : produto.nome
+    const produtoDescricao = mesmoProduto ? saida.produto_descricao : produto.descricao
+    const valorCusto = mesmoProduto ? saida.valor_custo : produto.valor_custo
+    const valorVendaCadastrado = mesmoProduto ? saida.valor_venda_cadastrado : produto.valor_venda
+
+    // Fiado: se continua fiado, mantem os pagamentos ja registrados; se deixou de ser, eles saem
+    let statusFiado = null
+    let valorPago = 0
+    let pagamentos = []
+    if (fiado && saida.fiado) {
+      valorPago = saida.valor_pago || 0
+      pagamentos = Array.isArray(saida.pagamentos) ? saida.pagamentos : []
+      statusFiado = saida.status_fiado === 'devolvido' ? 'devolvido' : statusPorPagamento(valorPago, valor)
+    } else if (fiado) {
+      statusFiado = 'pendente'
+    }
+
+    const updateRes = await client.query(
+      `UPDATE saidas SET produto_id=$1, produto_nome=$2, produto_descricao=$3, quantidade=$4, data=$5, cliente_id=$6, cliente_nome=$7,
+         valor_custo=$8, valor_venda_cadastrado=$9, valor_vendido=$10, forma_pagamento=$11, fiado=$12, data_acordada=$13,
+         status_fiado=$14, valor_pago=$15, pagamentos=$16
+       WHERE id=$17 RETURNING *`,
+      [produto ? produto.id : null, produtoNome, produtoDescricao, qtd, data || saida.data, cliente.id, cliente.nome,
+        valorCusto, valorVendaCadastrado, valor, forma_pagamento, fiado, fiado ? data_acordada : null,
+        statusFiado, valorPago, JSON.stringify(pagamentos), saida.id]
+    )
+
+    await client.query('COMMIT')
+    res.json(updateRes.rows[0])
+  } catch (e) {
+    await client.query('ROLLBACK')
+    responderErro(res, e, 'Erro ao editar venda')
+  } finally {
+    client.release()
+  }
+})
+
+// Excluir uma venda: as pecas voltam pro estoque
+app.delete('/api/saidas/:id', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const saidaRes = await client.query('SELECT * FROM saidas WHERE id=$1 FOR UPDATE', [req.params.id])
+    const saida = saidaRes.rows[0]
+    if (!saida) throw new ErroUsuario('Venda nao encontrada', 404)
+
+    if (saida.produto_id) {
+      await client.query('UPDATE produtos SET quantidade = quantidade + $1 WHERE id=$2', [saida.quantidade, saida.produto_id])
+    }
+    await client.query('UPDATE entradas SET saida_id=NULL WHERE saida_id=$1', [saida.id])
+    await client.query('DELETE FROM saidas WHERE id=$1', [saida.id])
+
+    await client.query('COMMIT')
+    res.json({ msg: 'deletado' })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    responderErro(res, e, 'Erro ao excluir venda')
   } finally {
     client.release()
   }
